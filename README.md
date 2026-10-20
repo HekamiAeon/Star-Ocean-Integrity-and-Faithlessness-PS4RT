@@ -108,6 +108,11 @@ The `--test` build runs the project's automated tests as well as compiling
 the runtime. A successful test suite does not establish full-game
 compatibility.
 
+For the full control layout, launch options, and troubleshooting, see
+[Running on Linux](docs/RUNNING_LINUX.md). For dependency, packaging, and
+source-distribution details, see the
+[Linux distribution guide](docs/DISTRIBUTING_LINUX.md).
+
 ### Keyboard and controller remapping
 
 Default keyboard controls include **WASD** (left stick), **arrow keys**
