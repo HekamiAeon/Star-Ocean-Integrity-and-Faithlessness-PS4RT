@@ -64,38 +64,69 @@ To exit, choose **Exit Game** in the overlay and confirm **Exit to desktop**. Sa
 
 ## Maintainer instructions
 
-### Source releases
+### Source and Linux runtime packages
 
-Create a reviewed, clean source checkpoint and export the tracked content rather than zipping an arbitrary development directory. This project does **not** include the Valkyria-only `tools/package_valkyria.py` exporter, so its commands and runtime archive manifest do not apply here.
+Build, test and package on the **Fedora host that passed gameplay testing**.
+The audited exporter, [`tools/package_star_ocean.py`](../tools/package_star_ocean.py),
+uses the exact committed Git source and verifies the 189 locked FSR 4 v07
+assets before creating either archive.
 
-From a clean checkout at the release revision:
+From the repository root:
 
 ~~~bash
 git status --short
 PS4RT_LTO=OFF bash build.sh --test
-mkdir -p out/community
-git archive --format=tar.gz -o out/community/star-ocean-5-ps4rt-v1.0-source.tar.gz HEAD
-sha256sum out/community/star-ocean-5-ps4rt-v1.0-source.tar.gz \
-  > out/community/star-ocean-5-ps4rt-v1.0-source.tar.gz.sha256
+python3 tools/package_star_ocean.py --preview
+python3 tools/package_star_ocean.py
+python3 tools/package_star_ocean.py --runtime --preview
+python3 tools/package_star_ocean.py --runtime
+(cd out/community && sha256sum -c *.sha256)
 ~~~
 
-`git status --short` should be reviewed for unintended or untracked changes first; `git archive HEAD` includes **tracked files** from that commit, not untracked local files. Review the resulting tarball's file list before publishing.
+Four release files are created under `out/community/`: the source `.tar.gz`
+and SHA256 file, plus the Linux x86-64 runtime `.tar.gz` and SHA256 file.
+The package names contain the first seven characters of the source commit.
+
+The exporter rejects modified tracked source, symlinks, private paths, missing
+overlay media, malformed host binaries, and FSR4 assets whose contents do not
+match the pinned lock file. It only packages `out/ps4rt` and
+`out/gpu/libps4rtgpu.so` from generated build outputs. No other files under
+`out/` are allowed in either archive.
+
+The runtime archive includes the matching corresponding source under
+`source/`, the executable `Play-Star-Ocean.sh`, the Python launch helpers,
+the required FSR4 assets, and the overlay art/sounds. The launcher's local
+workspace writes saves and shader caches **after** extraction and first use.
+
+**Validate the extracted runtime archive before distribution**, not merely
+the source checkout:
 
 ~~~bash
-tar -tzf out/community/star-ocean-5-ps4rt-v1.0-source.tar.gz | less
+mkdir -p /tmp/ps4rt-star-ocean-package-test
+tar -xzf out/community/star-ocean-5-ps4rt-linux-x86_64-*.tar.gz \
+  -C /tmp/ps4rt-star-ocean-package-test
+cd /tmp/ps4rt-star-ocean-package-test/star-ocean-5-ps4rt-linux-x86_64-*
+bash Play-Star-Ocean.sh --game /path/to/your/CUSA03219 \
+  --upscaler fsr4 --output-resolution 4k
 ~~~
 
-Keep `README.md`, `LICENSE`, `docs/UPSTREAM_CREDITS.md`, source files, build scripts, bundled dependency code, license notices, and required FSR3/FSR4 assets. The official port may also contain its intended README gameplay image and `gpu/assets/` overlay art and sound effects; identify and review these assets separately from the runtime's generated game data.
+Test graphics, saved settings, sound, and the in-game overlay. The binary
+package uses host system libraries, not bundled Fedora dependencies: confirm
+its `glibc` and shared-library requirements before claiming compatibility
+with other distributions. The tested distribution remains Fedora.
 
-**Never include** game extractions or encrypted/decrypted PKGs, proprietary linked game binaries, PS4 firmware/modules, personal saves, shader/pipeline caches under `out/`, debugging logs, private analysis work, reference repositories, or historical AGENTS/porting-log files. The project's ignore rules are a safeguard, **not** a substitute for checking the archive.
+Keep `README.md`, `LICENSE`, `docs/UPSTREAM_CREDITS.md`, source files,
+build scripts, vendored dependencies, license notices and all required FSR3/FSR4
+assets. The intended README screenshot and `gpu/assets/` overlay media are
+included; review their provenance separately from game files.
 
-A local archive does not automatically create a GitHub Release or upload anything.
+**Never include** game extractions or PKGs, proprietary linked game binaries,
+PS4 firmware/modules, personal saves, generated shader/pipeline caches,
+debugging logs, analysis work, reference repositories, or internal agent and
+porting-log files. Ignore rules and automated filters do not replace a manual
+archive review.
 
-### Optional prebuilt runtime release
-
-There is **no verified one-command binary packager** for this Star Ocean repository. If a portable release is made later, build its host binaries from the exact source revision to be released, test extraction and execution on the claimed host distributions, and audit runtime library dependencies.
-
-The current runtime is built as `out/ps4rt` and `out/gpu/libps4rtgpu.so` (plus local dependencies). A valid package would need a launcher adjusted to the packaged layout, the Python game-preparation/linking helpers, the required FSR resources, and a distribution-specific approach to external system libraries and compatible drivers. Do not publish an archive merely because the local checkout launches correctly.
+A local archive does not create a GitHub Release or upload anything.
 
 ### License and provenance
 
