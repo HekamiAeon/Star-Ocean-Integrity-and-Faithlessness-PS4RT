@@ -1,4 +1,4 @@
-# Star Ocean: Integrity and Faithlessness — PS4RT for PC Linux Port
+# Star Ocean 5: Integrity and Faithlessness — PS4RT for PC Linux Port
 
 An experimental, game-specific Linux compatibility runtime for **Star Ocean: Integrity and Faithlessness**
 (PlayStation 4, **CUSA03219**), tested on **Fedora Linux, x86-64**.
