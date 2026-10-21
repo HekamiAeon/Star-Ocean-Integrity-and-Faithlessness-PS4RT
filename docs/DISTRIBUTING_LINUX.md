@@ -6,7 +6,7 @@ This document explains how to build and distribute the **Star Ocean: Integrity a
 
 ## Player instructions
 
-**This v1.0 repository is a source checkout, not a downloadable prebuilt runtime archive.** Clone or download the source and follow the [Running on Linux guide](RUNNING_LINUX.md) to install prerequisites, build, and start the game.
+**v1.1 has a prebuilt Linux x86-64 archive**, with bundled application libraries. Extract and launch with `bash Play-Star-Ocean.sh --game /path/to/CUSA03219`. Host glibc 2.35+, Python 3 and working Vulkan drivers are still required. SteamOS compatibility awaits independent testing. See [Linux binary release](LINUX_BINARY_RELEASE.md).
 
 From the source root:
 
@@ -66,67 +66,18 @@ To exit, choose **Exit Game** in the overlay and confirm **Exit to desktop**. Sa
 
 ### Source and Linux runtime packages
 
-Build, test and package on the **Fedora host that passed gameplay testing**.
-The audited exporter, [`tools/package_star_ocean.py`](../tools/package_star_ocean.py),
-uses the exact committed Git source and verifies the 189 locked FSR 4 v07
-assets before creating either archive.
-
-From the repository root:
+From the repository root, after committing source changes:
 
 ~~~bash
-git status --short
-PS4RT_LTO=OFF bash build.sh --test
-python3 tools/package_star_ocean.py --preview
+BUNDLE="/absolute/path/printed/by/build-runtime.sh"
 python3 tools/package_star_ocean.py
-python3 tools/package_star_ocean.py --runtime --preview
-python3 tools/package_star_ocean.py --runtime
+python3 tools/package_star_ocean.py --runtime --bundle-from "$BUNDLE"
 (cd out/community && sha256sum -c *.sha256)
 ~~~
 
-Four release files are created under `out/community/`: the source `.tar.gz`
-and SHA256 file, plus the Linux x86-64 runtime `.tar.gz` and SHA256 file.
-The package names contain the first seven characters of the source commit.
+The source and Linux x86-64 archives keep the original filenames and commit suffix. Runtime packaging uses an allowlist of two tested ELF files and twelve audited shared libraries from the tested build. The exporter includes corresponding PS4RT source under `source/` and excludes game files, linked game code, saves and GPU caches.
 
-The exporter rejects modified tracked source, symlinks, private paths, missing
-overlay media, malformed host binaries, and FSR4 assets whose contents do not
-match the pinned lock file. It only packages `out/ps4rt` and
-`out/gpu/libps4rtgpu.so` from generated build outputs. No other files under
-`out/` are allowed in either archive.
-
-The runtime archive includes the matching corresponding source under
-`source/`, the executable `Play-Star-Ocean.sh`, the Python launch helpers,
-the required FSR4 assets, and the overlay art/sounds. The launcher's local
-workspace writes saves and shader caches **after** extraction and first use.
-
-**Validate the extracted runtime archive before distribution**, not merely
-the source checkout:
-
-~~~bash
-mkdir -p /tmp/ps4rt-star-ocean-package-test
-tar -xzf out/community/star-ocean-5-ps4rt-linux-x86_64-*.tar.gz \
-  -C /tmp/ps4rt-star-ocean-package-test
-cd /tmp/ps4rt-star-ocean-package-test/star-ocean-5-ps4rt-linux-x86_64-*
-bash Play-Star-Ocean.sh --game /path/to/your/CUSA03219 \
-  --upscaler fsr4 --output-resolution 4k
-~~~
-
-Test graphics, saved settings, sound, and the in-game overlay. The binary
-package uses host system libraries, not bundled Fedora dependencies: confirm
-its `glibc` and shared-library requirements before claiming compatibility
-with other distributions. The tested distribution remains Fedora.
-
-Keep `README.md`, `LICENSE`, `docs/UPSTREAM_CREDITS.md`, source files,
-build scripts, vendored dependencies, license notices and all required FSR3/FSR4
-assets. The intended README screenshot and `gpu/assets/` overlay media are
-included; review their provenance separately from game files.
-
-**Never include** game extractions or PKGs, proprietary linked game binaries,
-PS4 firmware/modules, personal saves, generated shader/pipeline caches,
-debugging logs, analysis work, reference repositories, or internal agent and
-porting-log files. Ignore rules and automated filters do not replace a manual
-archive review.
-
-A local archive does not create a GitHub Release or upload anything.
+See [`packaging/linux/README.md`](../packaging/linux/README.md) for build stages, `$ORIGIN` path validation and glibc requirements. Before public binary redistribution, complete the third-party [license/source review](../packaging/linux/THIRD_PARTY_REVIEW.md). Independent Steam Deck testing is still pending.
 
 ### License and provenance
 

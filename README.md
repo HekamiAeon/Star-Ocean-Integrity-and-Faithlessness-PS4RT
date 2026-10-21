@@ -61,6 +61,10 @@ are recorded in `packaging/fsr4-v07-assets.json`. FSR 4 requires compatible
 Vulkan GPU features and otherwise falls back to FSR 3.1. These are **upscaler
 dependencies**, not cached shaders compiled from the game.
 
+## Linux v1.1 release download
+
+Download the standard `star-ocean-5-ps4rt-linux-x86_64-<commit>.tar.gz` archive, extract it, then run `bash Play-Star-Ocean.sh --game /path/to/CUSA03219`. Requires host glibc 2.35+, Python 3 and working Vulkan drivers. SteamOS remains unverified. See [Linux binary release](docs/LINUX_BINARY_RELEASE.md).
+
 ## Quick start: Linux source checkout
 
 A prebuilt game archive is not included in this source repository. Build the

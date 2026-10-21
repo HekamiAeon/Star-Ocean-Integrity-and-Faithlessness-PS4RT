@@ -4,6 +4,10 @@ This is an experimental, game-specific native x86-64 Linux compatibility runtime
 
 You must supply your own **extracted, plaintext** CUSA03219 game folder. Neither this repository nor the launcher includes the game, PS4 firmware, package decryption tools, or downloads.
 
+## Prebuilt Linux archive
+
+The v1.1 GitHub release includes audited application libraries. Extract the archive and run `bash Play-Star-Ocean.sh --game /path/to/CUSA03219`. You still need glibc 2.35+, Python 3 and host Vulkan graphics drivers. See [Linux binary release](LINUX_BINARY_RELEASE.md).
+
 ## Building
 
 Install the source dependencies listed in the [README](../README.md), including a C/C++ toolchain, Python 3, CMake, Ninja, pkg-config, Vulkan, SDL3, FFmpeg and the other CMake dependencies. Fedora Linux x86-64 is the tested environment.
