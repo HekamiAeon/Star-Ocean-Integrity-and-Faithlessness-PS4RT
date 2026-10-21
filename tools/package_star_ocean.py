@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Build Star Ocean 5 PS4RT v1.0 source/runtime tarballs from reviewed Git files.
+"""Build audited source and Linux x86-64 runtime tarballs from committed Git files.
 
-Only the host ELF executables are read from the local build output. Never copy
-any other contents of out/, saves, PS4 executables, or shader caches.
+The runtime requires the tested binary bundle. Never include game content,
+saves, linked game executables or shader caches from any build directory.
 """
 import argparse
 import hashlib
 import io
 import json
+import os
+import re
+import shutil
 from pathlib import Path, PurePosixPath
 import subprocess
 import tarfile
@@ -16,6 +19,17 @@ import tarfile
 ROOT = Path(__file__).resolve().parent.parent
 BINARIES = {"out/ps4rt": ROOT / "out/ps4rt",
             "out/gpu/libps4rtgpu.so": ROOT / "out/gpu/libps4rtgpu.so"}
+LINUX_LIBRARIES = (
+    "libavcodec.so.62", "libavformat.so.62", "libavutil.so.60",
+    "libfmt.so.11", "libgcc_s.so.1", "libSDL3.so.0",
+    "libstdc++.so.6", "libswresample.so.6", "libswscale.so.9",
+    "libxxhash.so.0", "libz.so.1", "libZydis.so.5.0",
+)
+EXPECTED_RUNPATH = {
+    "out/ps4rt": "$ORIGIN/../lib:$ORIGIN/gpu",
+    "out/gpu/libps4rtgpu.so": "$ORIGIN/../../lib",
+}
+
 PRIVATE_COMPONENTS = {
     ".git", ".agents", ".codex", ".ghidra", "__pycache__", "original",
     "references", "Reference", "analysis", "savedata", "savedata-backups",
@@ -89,7 +103,9 @@ def verify_release_files(source):
         "gpu/assets/sounds/cancel.wav", "docs/RUNNING_LINUX.md",
         "docs/DISTRIBUTING_LINUX.md", "docs/UPSTREAM_CREDITS.md",
         "docs/images/readme/sample.png",
-        "packaging/fsr4-v07-assets.json",
+        "packaging/fsr4-v07-assets.json", "docs/LINUX_BINARY_RELEASE.md",
+        "packaging/linux/README.md", "packaging/linux/THIRD_PARTY_REVIEW.md",
+        "packaging/linux/Containerfile.ffmpeg-png",
     }
     for name in sorted(required - set(source)):
         raise SystemExit("Missing required release file: " + name)
@@ -113,6 +129,40 @@ def host_elf(path):
     return data
 
 
+def verify_bundle(bundle):
+    """Ensure every shipped ELF uses only the audited relative library layout."""
+    for program in ("patchelf", "readelf", "ldd"):
+        if not shutil.which(program):
+            raise SystemExit("Install required audit tool: " + program)
+    names = {**EXPECTED_RUNPATH, **{"lib/" + n: "$ORIGIN" for n in LINUX_LIBRARIES}}
+    files = {}
+    for name, expected_rpath in names.items():
+        path = bundle / name
+        host_elf(path)
+        actual = subprocess.check_output(["patchelf", "--print-rpath", str(path)], text=True).strip()
+        if actual != expected_rpath:
+            raise SystemExit("Unexpected RUNPATH for " + name + ": " + repr(actual))
+        versions = subprocess.check_output(["readelf", "-W", "--version-info", str(path)], text=True)
+        maxima = [tuple(map(int, v.split('.'))) for v in re.findall(r"GLIBC_([0-9]+(?:\.[0-9]+)+)", versions)]
+        if maxima and max(maxima) > (2, 35):
+            raise SystemExit("GLIBC requirement exceeds 2.35: " + name)
+        files[name] = path
+    env = os.environ.copy()
+    env.pop("LD_LIBRARY_PATH", None)
+    env.pop("LD_PRELOAD", None)
+    for name in EXPECTED_RUNPATH:
+        run = subprocess.run(["ldd", str(files[name])], capture_output=True, text=True, env=env)
+        output = run.stdout + run.stderr
+        if run.returncode or "not found" in output:
+            raise SystemExit("Missing dependency in " + name + ":\n" + output)
+        for line in output.splitlines():
+            m = re.match(r"\s*(\S+)\s+=>\s+(/\S+)\s+\(", line)
+            if m and m.group(1) in LINUX_LIBRARIES:
+                if Path(m.group(2)).resolve() != (bundle / "lib" / m.group(1)).resolve():
+                    raise SystemExit("Dependency escapes the bundle: " + line)
+    return files
+
+
 def runtime_entries(source, modes):
     # GPL corresponding source is retained under source/. Only the required
     # host binaries, shaders, media and Python launcher are at the package root.
@@ -120,7 +170,7 @@ def runtime_entries(source, modes):
     root_files = {
         "run.sh", "README.md", "LICENSE", "packaging/fsr4-v07-assets.json",
         "docs/RUNNING_LINUX.md", "docs/DISTRIBUTING_LINUX.md",
-        "docs/UPSTREAM_CREDITS.md",
+        "docs/UPSTREAM_CREDITS.md", "docs/LINUX_BINARY_RELEASE.md",
     }
     for name, data in source.items():
         if (name in root_files or name.startswith((
@@ -177,16 +227,28 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", action="store_true",
                         help="Package locally compiled Linux runtime, with source")
+    parser.add_argument("--bundle-from", type=Path,
+                        help="Existing tested Linux bundle with out/ and lib/; required for --runtime")
     parser.add_argument("--preview", action="store_true",
                         help="Print manifest file list without writing archives")
     parser.add_argument("--output", type=Path, default=ROOT / "out/community")
     args = parser.parse_args()
+    if args.runtime != (args.bundle_from is not None):
+        raise SystemExit("Runtime packages require --runtime --bundle-from <audited-bundle>; "
+                         "omit both for source packages")
+    if args.runtime:
+        files = verify_bundle(args.bundle_from.expanduser().resolve())
+        BINARIES.clear()
+        BINARIES.update({name: files[name] for name in EXPECTED_RUNPATH})
     revision, source, modes = committed_source()
     verify_release_files(source)
     kind = "linux-x86_64" if args.runtime else "source"
     name = f"star-ocean-5-ps4rt-{kind}-{revision[:7]}"
     items = (runtime_entries(source, modes) if args.runtime else
              {path: (content, modes[path]) for path, content in source.items()})
+    if args.runtime:
+        for library_name in LINUX_LIBRARIES:
+            items["lib/" + library_name] = (host_elf(files["lib/" + library_name]), 0o644)
     if args.preview:
         print(json.dumps({"revision": revision, "kind": kind,
                           "paths": sorted(items)}, indent=2))
