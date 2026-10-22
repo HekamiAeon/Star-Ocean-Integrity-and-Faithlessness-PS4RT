@@ -4,36 +4,34 @@ This document explains how to build and distribute the **Star Ocean: Integrity a
 
 **This repository contains the runtime and its licensed dependencies, not the game, its firmware, or decryption tools.** Each player supplies an independently obtained, extracted, plaintext copy of the game.
 
-## Player instructions
+## For players: download, extract, run
 
-**v1.1 has a prebuilt Linux x86-64 archive**, with bundled application libraries. Extract and launch with `bash Play-Star-Ocean.sh --game /path/to/CUSA03219`. Host glibc 2.35+, Python 3 and working Vulkan drivers are still required. SteamOS compatibility awaits independent testing. See [Linux binary release](LINUX_BINARY_RELEASE.md).
+**Do not compile from source to play v1.1.** Download the Linux runtime archive from the [latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest). Choose `star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz`, not the source archive.
 
-From the source root:
+Extract the download and open a terminal in the extracted folder:
 
-~~~bash
+```bash
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-412d2b1
+bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"
+```
+
+Replace `/path/to/CUSA03219` with the path to **your extracted plaintext game folder**. It must contain `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and game data. Do not supply the PKG, an executable file, or the parent folder.
+
+**You do not need FFmpeg/SDL3 installation commands or `LD_LIBRARY_PATH`.** The application libraries are bundled. The player still needs glibc 2.35+, Python 3, a compatible Vulkan graphics/display stack, and x86-64 Linux.
+
+**FSR and resolution launch arguments are optional.** Hold **L2** and **click R3 (the right stick)**, or press **Insert**, to choose resolution and upscaling in the graphics settings menu. **AF changes require a restart**; the other graphics options apply live. See [Running on Linux](RUNNING_LINUX.md) for details.
+
+### Building from source is for developers
+
+For a conventional host-native source build, install a compiler, CMake, Ninja, pkg-config, Python 3, Vulkan development packages and SDL3, FFmpeg, fmt, Boost, xxhash, robin-map, VMA, Zydis, glslang and X11 development dependencies, then from the repository root:
+
+```bash
 PS4RT_LTO=OFF bash build.sh --test
+bash run.sh --game "/path/to/CUSA03219"
+```
 
-bash run.sh \
-  --game /path/to/your/CUSA03219 \
-  --upscaler fsr4 \
-  --output-resolution 4k
-~~~
-
-`--upscaler fsr4` and `--output-resolution 4k` are optional; the launcher also supports `fsr3` or `off` and 1080p or 1440p outputs. A GUI game-folder chooser is **not** implemented, and `--game` is required. The source release has no `Play-Valkyria.sh`-style packaged launcher or `--data-dir` argument.
-
-The supplied directory must include `sce_sys/param.sfo`, a plaintext `eboot.bin`, compatible modules under `sce_module/`, and the required game data. The launcher does not decrypt PKGs, fetch game content, or access PSN.
-
-### Host requirements
-
-**Linux x86-64, tested on Fedora.** Building uses a C/C++ toolchain, Python 3, CMake, Ninja, pkg-config, a compatible Vulkan loader/driver and development libraries for SDL3 and FFmpeg, plus the libraries required by the project's [README](../README.md) and `gpu/CMakeLists.txt` (including fmt, xxhash, Boost, robin-map, Vulkan Memory Allocator, Zydis, glslang, and X11).
-
-The build also uses vendored third-party sources where included. For troubleshooting missing key pkg-config modules:
-
-~~~bash
-pkg-config --modversion vulkan sdl3 libavcodec libavutil libswscale
-~~~
-
-Other distributions may work with compatible libraries, but have not been verified. The program is compiled and linked against the local host's libraries; **a build made on Fedora is not guaranteed to run unchanged on an older distribution**. Do not assume a universal glibc minimum from a prior Valkyria build. A relocatable binary archive or AppImage would need separate build-baseline and dependency testing.
+This host-native build links against the **developer's** installed libraries and does not itself produce the standardized release bundle. For a distribution-targeted build, use the automated Ubuntu 22.04/glibc 2.35 pipeline described in [`packaging/linux/README.md`](../packaging/linux/README.md). That container workflow builds the bundled release, and is **not** required by players.
 
 ### Graphics, controls, and gameplay status
 
@@ -66,7 +64,7 @@ To exit, choose **Exit Game** in the overlay and confirm **Exit to desktop**. Sa
 
 ### Source and Linux runtime packages
 
-From the repository root, after committing source changes:
+From the repository root, after committing source changes, run `bash packaging/linux/build-images.sh` once to create the build image if needed. Then run `bash packaging/linux/build-runtime.sh`; it prints the resulting bundle path. Package that bundle with:
 
 ~~~bash
 BUNDLE="/absolute/path/printed/by/build-runtime.sh"

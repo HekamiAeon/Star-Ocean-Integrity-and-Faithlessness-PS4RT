@@ -18,6 +18,37 @@ your own extracted, plaintext CUSA03219 game folder. The launcher does not
 download games, decrypt encrypted packages, or connect to PSN. This project is
 not affiliated with Square Enix, Sony, or AMD.
 
+## Download and play (no compiling required)
+
+**Want to play the game? Use the prebuilt Linux release. You do not need to compile PS4RT or install FFmpeg, SDL3, or other bundled application libraries.**
+
+1. **Download:** Go to the [latest GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest) and download the **`star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz`** file. This is the game runtime; the separately labeled `source` archive is for developers.
+2. **Have your own extracted PS4 game:** The launcher needs an already extracted, plaintext **`CUSA03219` folder** containing `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and the game's data. **Point to the CUSA03219 folder itself**, not the PKG, not its parent directory, and not the `eboot.bin` file.
+3. **Extract the Linux download** (using your file manager's Extract option, or the commands below).
+4. **Launch the game** using the command below, replacing the example game path with the real location of your `CUSA03219` folder:
+
+```bash
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-412d2b1
+bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"
+```
+
+**That's all you need to launch it.** Keep the extracted release folder together and writable. The first launch prepares the game's working files locally; it does not modify your original game extraction. Paths containing spaces must be inside quotes, as shown.
+
+**Graphics are controlled in-game.** Hold **L2** and **click the right stick (R3)** to open the graphics settings. On a keyboard, press **Insert**. Choose the resolution (1080p, 1440p, 4K), upscaling (Off, FSR 3.1, or FSR 4 v07 where supported), sharpening, AF, and Sync/Async shader compilation. Use the D-pad, Cross to confirm, and Circle to go back.
+
+**You do NOT need to specify FSR or resolution at launch.** Those command-line options are entirely optional. If you prefer, you can start directly with FSR 4 and 4K output:
+
+```bash
+bash Play-Star-Ocean.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
+```
+
+**IMPORTANT: Changing anisotropic filtering (AF) requires restarting the game.** The other graphics settings above apply without a restart.
+
+**Player requirements:** x86-64 Linux with glibc **2.35 or newer**, Python 3, a working Vulkan loader/driver, and compatible host display/input libraries. Required app libraries such as FFmpeg 8 and SDL3 are already in the download. No `LD_LIBRARY_PATH` command is needed. Fedora gameplay is verified; SteamOS and other Linux distributions have not yet been independently verified.
+
+For a more detailed walkthrough, see [Running on Linux](docs/RUNNING_LINUX.md). The download does **not** include PS4 game files or firmware.
+
 ## Current status
 
 **Experimental and playable through tested early-story sections; not a verified
@@ -61,61 +92,20 @@ are recorded in `packaging/fsr4-v07-assets.json`. FSR 4 requires compatible
 Vulkan GPU features and otherwise falls back to FSR 3.1. These are **upscaler
 dependencies**, not cached shaders compiled from the game.
 
-## Linux v1.1 release download
+## Build from source (developers only)
 
-Download the standard `star-ocean-5-ps4rt-linux-x86_64-<commit>.tar.gz` archive, extract it, then run `bash Play-Star-Ocean.sh --game /path/to/CUSA03219`. Requires host glibc 2.35+, Python 3 and working Vulkan drivers. SteamOS remains unverified. See [Linux binary release](docs/LINUX_BINARY_RELEASE.md).
+**Downloaded the prebuilt Linux release? Skip this section.** The commands below are for contributors compiling PS4RT; players should use the `Play-Star-Ocean.sh` instructions above.
 
-## Quick start: Linux source checkout
-
-A prebuilt game archive is not included in this source repository. Build the
-runtime and provide **your own extracted CUSA03219 game directory**.
-
-From the root of the repository:
+From a source checkout, install a C/C++ toolchain, CMake, Ninja, pkg-config, Python 3, and development packages for Vulkan, SDL3, FFmpeg, fmt, Boost, xxhash, robin-map, Vulkan Memory Allocator, Zydis, glslang, and X11. Included third-party source components are built as needed.
 
 ```bash
 PS4RT_LTO=OFF bash build.sh --test
-
-bash run.sh \
-  --game /path/to/your/CUSA03219 \
-  --upscaler fsr4 \
-  --output-resolution 4k
+bash run.sh --game "/path/to/CUSA03219"
 ```
 
-The FSR and 4K arguments are optional launch overrides. You can also start
-with `bash run.sh --game /path/to/your/CUSA03219` and choose graphics
-options through the in-game overlay. The game directory must contain
-`sce_sys/param.sfo`, the extracted main game binary, required modules,
-and game data. The launcher uses the originals to prepare private working
-files under `out/` and does not modify your original extraction.
+The old source-build commands remain valid on a host that has the required development packages. The `--test` build runs automated tests, not a full gameplay test. Source checkouts prepare private, game-derived files under `out/` without modifying the original game folder. Never commit or distribute `out/`, which can contain game-derived binaries, saves, and GPU caches.
 
-**Source requirements:** Linux x86-64, Python 3, a C/C++ compiler, CMake,
-Ninja, pkg-config, a Vulkan loader and compatible graphics driver,
-and development libraries for SDL3, FFmpeg, and the additional dependencies
-used by the included CMake project. Fedora is the tested environment;
-other distributions may require dependency adjustments.
-
-## Build from source
-
-Install a C/C++ toolchain, CMake, Ninja, pkg-config, Python 3, and development
-packages for Vulkan, SDL3, FFmpeg, fmt, Boost, xxhash, robin-map, Vulkan
-Memory Allocator, Zydis, glslang, and X11. Third-party source dependencies
-required by the build are included in this repository.
-
-Build and run:
-
-```bash
-PS4RT_LTO=OFF bash build.sh --test
-bash run.sh --game /path/to/your/CUSA03219
-```
-
-The `--test` build runs the project's automated tests as well as compiling
-the runtime. A successful test suite does not establish full-game
-compatibility.
-
-For the full control layout, launch options, and troubleshooting, see
-[Running on Linux](docs/RUNNING_LINUX.md). For dependency, packaging, and
-source-distribution details, see the
-[Linux distribution guide](docs/DISTRIBUTING_LINUX.md).
+For creating the glibc 2.35 release binaries with the standardized Ubuntu 22.04 container instead of a host-native source build, see [Linux release build instructions](packaging/linux/README.md) and the [distribution guide](docs/DISTRIBUTING_LINUX.md).
 
 ### Keyboard and controller remapping
 

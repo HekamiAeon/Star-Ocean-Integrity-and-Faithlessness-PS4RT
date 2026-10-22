@@ -4,9 +4,37 @@ This is an experimental, game-specific native x86-64 Linux compatibility runtime
 
 You must supply your own **extracted, plaintext** CUSA03219 game folder. Neither this repository nor the launcher includes the game, PS4 firmware, package decryption tools, or downloads.
 
-## Prebuilt Linux archive
+## Download and run v1.1 (no compiling)
 
-The v1.1 GitHub release includes audited application libraries. Extract the archive and run `bash Play-Star-Ocean.sh --game /path/to/CUSA03219`. You still need glibc 2.35+, Python 3 and host Vulkan graphics drivers. See [Linux binary release](LINUX_BINARY_RELEASE.md).
+**Playing the game? Download the Linux runtime archive from the [latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest).** Choose `star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz`, not the source archive.
+
+1. Have your own extracted, plaintext `CUSA03219` directory. It must contain `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and the game's data. Do not point to a `.pkg`, `eboot.bin` alone, or the parent of `CUSA03219`.
+2. Extract the downloaded `.tar.gz` with your file manager, or run the extraction commands below.
+3. Open a terminal **inside the extracted Linux release folder**, then run `bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"`. Replace the example path with your real one and keep quotes if it contains spaces.
+
+```bash
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-412d2b1
+bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"
+```
+
+**No library installation step is necessary for FFmpeg, SDL3, fmt, Zydis, or the other bundled application libraries.** No `LD_LIBRARY_PATH` setting or source compilation is required. You still need x86-64 Linux, glibc 2.35+, Python 3, and a working host Vulkan graphics/display stack.
+
+### Graphics: choose settings inside the game
+
+**Hold L2 and click R3 (press the right stick inward)** on a controller, or press **Insert** on the keyboard to open the PS4RT graphics menu. Set **1080p, 1440p or 4K** output, **Off / FSR 3.1 / FSR 4 v07** upscaling (as supported), sharpening, anisotropic filtering (AF), and Sync/Async shader compilation. D-pad moves, Cross confirms, Circle goes back.
+
+**FSR and resolution command-line arguments are optional.** You can set everything in the graphics menu. If you want launch-time overrides, this works too:
+
+```bash
+bash Play-Star-Ocean.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
+```
+
+**IMPORTANT: AF (anisotropic filtering) changes require a game restart to take effect.** Resolution, upscaling, sharpening, and Sync/Async shader compilation apply live. The menu saves changed settings when it closes.
+
+The game is not included in this download. Fedora has been gameplay-tested; SteamOS and other distributions still need independent verification. See [Linux binary release](LINUX_BINARY_RELEASE.md) for the package layout.
+
+## Building from source (developers only)
 
 ## Building
 
@@ -26,7 +54,7 @@ PS4RT_LTO=OFF bash build.sh
 
 The runtime binary is generated at `out/ps4rt`. Passing the test suite checks the build, **not** every part of the game.
 
-## Launching
+## Launching a source build (developers only)
 
 Point the launcher at your own extracted CUSA03219 game directory:
 
@@ -116,7 +144,7 @@ Press **Insert**, or hold **L2** and click **R3**, to open the custom Star Ocean
 - Sharpening and anisotropic filtering (**Game default / 2× / 4× / 8× / 16×**).
 - **Asynchronous compilation** ON or OFF. **OFF (Sync)** is the fresh-install default: it may stutter when shaders first compile but has more consistent visuals. **ON (Async)** reduces shader-loading stutter but may produce brief visual flickers in some areas.
 
-Resolution, upscaler selection, sharpening, and shader compilation mode apply live; **anisotropic filtering requires a restart**. The overlay saves changed settings when you close it. The game renders its original 1080p scene before display reconstruction, so a 4K output is not native 4K game rendering. There is no bundled 60 FPS patch or frame-generation mode.
+Resolution, upscaler selection, sharpening, and shader compilation mode apply live; **IMPORTANT: changing anisotropic filtering (AF) requires restarting the game**. The overlay saves changed settings when you close it. The game renders its original 1080p scene before display reconstruction, so a 4K output is not native 4K game rendering. There is no bundled 60 FPS patch or frame-generation mode.
 
 To quit, choose **Exit Game**, then confirm **Exit to desktop**. Cancel or Circle/Escape returns to the game. **Save progress inside Star Ocean before exiting**; saving PS4RT graphics settings is not a game save.
 
