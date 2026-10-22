@@ -36,8 +36,6 @@ The game is not included in this download. Fedora has been gameplay-tested; Stea
 
 ## Building from source (developers only)
 
-## Building
-
 Install the source dependencies listed in the [README](../README.md), including a C/C++ toolchain, Python 3, CMake, Ninja, pkg-config, Vulkan, SDL3, FFmpeg and the other CMake dependencies. Fedora Linux x86-64 is the tested environment.
 
 From the repository root, build the runtime and run its automated checks:
