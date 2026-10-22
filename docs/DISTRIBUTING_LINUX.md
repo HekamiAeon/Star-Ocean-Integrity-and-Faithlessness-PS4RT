@@ -20,6 +20,8 @@ Replace `/path/to/CUSA03219` with the path to **your extracted plaintext game fo
 
 **You do not need FFmpeg/SDL3 installation commands or `LD_LIBRARY_PATH`.** The application libraries are bundled. The player still needs glibc 2.35+, Python 3, a compatible Vulkan graphics/display stack, and x86-64 Linux.
 
+**CPU architecture:** The release supports native **x86-64/AMD64** execution. **ARM64 is unsupported**, including ARM Linux systems using FEX, Box64, or similar translation layers. A translator may partially launch the executable, but this does not establish reliable PS4RT gameplay. The system's Linux distribution alone does not determine CPU compatibility.
+
 **FSR and resolution launch arguments are optional.** Hold **L2** and **click R3 (the right stick)**, or press **Insert**, to choose resolution and upscaling in the graphics settings menu. **AF changes require a restart**; the other graphics options apply live. See [Running on Linux](RUNNING_LINUX.md) for details.
 
 ### Building from source is for developers
