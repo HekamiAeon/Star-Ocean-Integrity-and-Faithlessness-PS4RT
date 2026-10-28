@@ -163,21 +163,45 @@ def verify_bundle(bundle):
     return files
 
 
+# Required legal notices remain beside the portable runtime. The matching,
+# complete source archive (including docs/) is published separately.
+PLAYER_LICENSE_FILES = {
+    "gpu/shadps4/LICENSE",
+    "gpu/third_party/fonts/LICENSE-DejaVu.txt",
+    "gpu/third_party/fsr-vulkan/LICENSE.txt",
+    "gpu/third_party/fsr-vulkan/NOTICE.md",
+    "gpu/third_party/half/LICENSE.txt",
+    "gpu/third_party/imgui/LICENSE.txt",
+    "gpu/third_party/magic_enum/LICENSE",
+    "gpu/third_party/miniz/LICENSE",
+    "gpu/third_party/sirit/LICENSE.txt",
+    "gpu/third_party/xbyak/COPYRIGHT",
+    "third_party/LibAtrac9/LICENSE",
+}
+
+
 def runtime_entries(source, modes):
-    # GPL corresponding source is retained under source/. Only the required
-    # host binaries, shaders, media and Python launcher are at the package root.
-    package = {"source/" + name: (data, modes[name]) for name, data in source.items()}
+    """Player archive: runnable code, assets and legal notices; no docs/source tree."""
+    package = {}
     root_files = {
-        "run.sh", "README.md", "LICENSE", "packaging/fsr4-v07-assets.json",
-        "docs/RUNNING_LINUX.md", "docs/DISTRIBUTING_LINUX.md",
-        "docs/UPSTREAM_CREDITS.md", "docs/LINUX_BINARY_RELEASE.md",
-    }
+        "run.sh", "LICENSE", "packaging/fsr4-v07-assets.json",
+    } | PLAYER_LICENSE_FILES
     for name, data in source.items():
         if (name in root_files or name.startswith((
             "scripts/", "fsr4_shaders/", "gpu/assets/",
             "gpu/third_party/fsr-vulkan/generated/"
         ))):
             package[name] = (data, modes[name])
+    # Keep upstream attribution available offline without a docs/ folder.
+    if "docs/UPSTREAM_CREDITS.md" in source:
+        package["CREDITS.md"] = (source["docs/UPSTREAM_CREDITS.md"], 0o644)
+    package["PLAYER_README.txt"] = (
+        b"Star Ocean: Integrity and Faithlessness - PS4RT for Linux x86-64\n"
+        b"Run: bash Play-Star-Ocean.sh --game \"/path/to/CUSA03219\"\n"
+        b"Instructions: https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT\n"
+        b"Requires your own plaintext extracted PS4 game. No game files included.\n",
+        0o644,
+    )
     launcher = (
         '#!/usr/bin/env bash\nset -euo pipefail\n'
         'cd -- "$(dirname -- "$0")"\n'
@@ -187,7 +211,6 @@ def runtime_entries(source, modes):
     for name, path in BINARIES.items():
         package[name] = (host_elf(path), 0o755)
     return package
-
 
 def export(target, dirname, revision, kind, items):
     if target.exists() or target.is_symlink():
