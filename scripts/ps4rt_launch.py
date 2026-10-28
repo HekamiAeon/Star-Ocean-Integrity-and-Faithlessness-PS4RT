@@ -58,7 +58,7 @@ def main(argv=None) -> int:
     # choice to out/<title_id>/ps4rt.ini. New configs default to Sync.
     env.update(PS4RT_BC6_FLOAT='unsigned', PS4RT_TRANSITION_SNAPSHOT='1',
                PS4RT_OBJECT_MOTION='0', PS4RT_FSR1='0',
-               PS4RT_PARTIAL_HEIGHT_VIEWS='0', PS4RT_UPSCALER='off')
+               PS4RT_PARTIAL_HEIGHT_VIEWS='0')
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
     # Restart through the player launcher, preserving the selected game and options.
