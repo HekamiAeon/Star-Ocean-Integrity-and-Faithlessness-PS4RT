@@ -414,7 +414,8 @@ void runtime_restart(void) {
     TerminateProcess(GetCurrentProcess(),0);
 #else
     const char *command = getenv("PS4RT_RESTART_COMMAND");
-    syscall(SYS_close_range, 3u, ~0u, 0u);
+    /* Mark descriptors close-on-exec; do not close live GPU fds under threads. */
+    syscall(SYS_close_range, 3u, ~0u, 4u); /* CLOSE_RANGE_CLOEXEC */
     if (command && *command) {
         puts("Runtime: restarting through PS4RT_RESTART_COMMAND");
         execl("/bin/sh", "sh", "-c", command, (char *)NULL);
