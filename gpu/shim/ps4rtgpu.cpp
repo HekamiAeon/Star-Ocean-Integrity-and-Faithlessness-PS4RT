@@ -5,9 +5,7 @@
 #include "ps4rt_settings.h"
 #include "ps4rt_gpu_workarounds.h"
 #include "ps4rt_copy.h"
-#ifndef _WIN32
 #include <sys/resource.h>
-#endif
 #include "ps4rt_toggles.h"
 #include <algorithm>
 #include <atomic>
@@ -238,11 +236,7 @@ extern "C" int ps4rtgpu_init(const Ps4RtGpuConfig* config) {
     StartProfileWriter();
 #endif
     g_sdk_version = config->sdk_version;
-#ifdef _WIN32
-    if (config->user_dir && !std::getenv("PS4RT_GPU_USER_DIR")) _putenv_s("PS4RT_GPU_USER_DIR", config->user_dir);
-#else
     if (config->user_dir) setenv("PS4RT_GPU_USER_DIR", config->user_dir, 0);
-#endif
     Core::Emulator::FillElfInfo(*config);
     const std::string title = config->title ? config->title : "PS4RT";
     const s32 width = config->width, height = config->height;
