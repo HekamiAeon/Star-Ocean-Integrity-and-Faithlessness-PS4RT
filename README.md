@@ -45,7 +45,7 @@ bash Play-Star-Ocean.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-res
 
 **IMPORTANT: Changing anisotropic filtering (AF) requires restarting the game.** The other graphics settings above apply without a restart.
 
-**Player requirements:** x86-64 Linux with glibc **2.35 or newer**, Python 3, a working Vulkan loader/driver, and compatible host display/input libraries. Required app libraries such as FFmpeg 8 and SDL3 are already in the download. No `LD_LIBRARY_PATH` command is needed. Fedora gameplay is verified; SteamOS and other Linux distributions have not yet been independently verified.
+**Player requirements:** x86-64 Linux with glibc **2.35 or newer**, Python 3, a working Vulkan loader/driver, and compatible host display/input libraries. Required app libraries such as FFmpeg 8 and SDL3 are already in the download. No `LD_LIBRARY_PATH` command is needed. Fedora gameplay is verified; Steamdeck systems (SteamOS) have been confirmed to work.
 
 **Architecture support:** The prebuilt runtime targets **native x86-64 (AMD64) CPUs only**. ARM64 devices, including Snapdragon-based handhelds running Linux through FEX or Box64, are **not supported or validated**. Such translation layers may start the game, but correct execution and stability are not guaranteed. An ARM-compatible Linux distribution does not remove the CPU translation requirement.
 
