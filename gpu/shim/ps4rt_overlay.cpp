@@ -621,6 +621,27 @@ void Menu() {
         ImGui::SameLine();
         if (ImGui::Button("Exit Game"))
             ImGui::OpenPopup("Exit game?");
+        ImGui::SameLine();
+        if (ImGui::Button("Restart Game"))
+            ImGui::OpenPopup("Restart game?");
+        // Restart from boot; game progress is saved only inside the game itself.
+        if (ImGui::BeginPopupModal("Restart game?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("Restart the game from the start? Unsaved game progress will be lost.");
+            ImGui::Spacing();
+            if (ImGui::Button("Cancel") ||
+                ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+                ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+            if (ImGui::Button("Restart")) {
+                Ps4RtSettings::Save();
+                dirty = false;
+                runtime_restart();
+            }
+            ImGui::EndPopup();
+        }
         // Confirm explicitly: closing the host process does not save in-game progress.
         if (ImGui::BeginPopupModal("Exit game?", nullptr,
                                   ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -650,7 +671,8 @@ void Menu() {
         }
         // Circle first cancels a popup or slider; another press closes the panel.
         if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) &&
-            !cancel_was_editing && !ImGui::IsPopupOpen("Exit game?"))
+            !cancel_was_editing && !ImGui::IsPopupOpen("Exit game?") &&
+            !ImGui::IsPopupOpen("Restart game?"))
             keep_open = false;
         ImGui::End();
         if (!keep_open) SetOpen(false);
@@ -1120,8 +1142,8 @@ bool HandleEvent(const SDL_Event& event) {
     case SDL_EVENT_KEY_UP: {
         const bool down = event.type == SDL_EVENT_KEY_DOWN;
         if (is_open && event.key.key == SDLK_ESCAPE &&
-            ImGui::IsPopupOpen("Exit game?")) {
-            // Let Escape cancel the exit confirmation instead of closing the whole panel.
+            (ImGui::IsPopupOpen("Exit game?") || ImGui::IsPopupOpen("Restart game?"))) {
+            // Let Escape cancel the exit or restart confirmation, not close the panel.
             if (down && !event.key.repeat) menu_sounds.Play(Ps4RtMenuSounds::Cue::Cancel);
             io.AddKeyEvent(ImGuiKey_Escape, down);
             return true;
