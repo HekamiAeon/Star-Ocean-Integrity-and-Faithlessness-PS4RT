@@ -411,9 +411,9 @@ bool Rasterizer::DrawPipeWanted() {
     if (env && env[0]) {
         return env[0] == '1';
     }
-    // Stage B spins while draws flow. Measured ahead with 16 threads (+19%) and with 4 cores /
-    // 8 threads (taskset, Steam Deck-like: +18%).
-    return Ps4RtThreads::Available() >= 8;
+    // Draw-pipeline threading is opt-in: some games can lose UI/fade draws.
+    // Prefer the serial compatibility path unless PS4RT_DRAW_PIPE=1 is supplied.
+    return false;
 }
 
 bool Rasterizer::UseDrawPipe() const {
