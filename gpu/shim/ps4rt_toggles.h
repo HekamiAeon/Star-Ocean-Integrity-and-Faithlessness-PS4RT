@@ -6,14 +6,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
-#ifdef _WIN32
-// ps4rt (Windows): no signals. The loader's exception handler resumes the faulting thread
-// in ps4rt_longjmp (src/compat_win.c: no unwinding through the faulting frames).
-typedef unsigned long long sigjmp_buf[32];
-extern "C" __attribute__((returns_twice)) int ps4rt_setjmp(sigjmp_buf buffer);
-#define sigsetjmp(buffer, save) ps4rt_setjmp(buffer)
-#endif
-
 extern "C" std::uint64_t runtime_disabled_optimizations;
 /// Recovery point for speculative guest memory reads on this thread (runtime_memory.c).
 extern "C" __thread sigjmp_buf* runtime_fault_recover;

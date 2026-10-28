@@ -63,9 +63,7 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
 pkg_check_modules(SDL3 REQUIRED IMPORTED_TARGET sdl3)
-if (NOT WIN32)
-    pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
-endif()
+pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
 find_package(miniz QUIET)
 if (NOT miniz_FOUND)
     set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -149,14 +147,7 @@ set(COMMON
 file(GLOB AVPLAYER CONFIGURE_DEPENDS shadps4/core/libraries/avplayer/*.cpp)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 file(GLOB SHIM_SOURCES CONFIGURE_DEPENDS shim/*.cpp shim/*/*.cpp)
-# Windows: a DLL cannot leave the runtime_* symbols for ps4rt-probe.exe to resolve, so the
-# library is static there and linked into the executable.
-if (WIN32)
-    set(PS4RTGPU_KIND STATIC)
-else()
-    set(PS4RTGPU_KIND SHARED)
-endif()
-add_library(ps4rtgpu ${PS4RTGPU_KIND} ${VIDEO_CORE} ${RECOMPILER} ${COMMON} ${SHIM_SOURCES}
+add_library(ps4rtgpu SHARED ${VIDEO_CORE} ${RECOMPILER} ${COMMON} ${SHIM_SOURCES}
     shadps4/core/libraries/gnmdriver/gnmdriver.cpp
     shadps4/core/libraries/videoout/driver.cpp shadps4/core/libraries/videoout/video_out.cpp
     shadps4/core/libraries/kernel/equeue.cpp shadps4/core/libraries/kernel/event_flag.cpp ${AVPLAYER}
@@ -176,22 +167,12 @@ target_include_directories(ps4rtgpu PRIVATE shim shadps4 ${SHADER_INCLUDE} third
 target_compile_definitions(ps4rtgpu PRIVATE BOOST_ASIO_STANDALONE NDEBUG)
 target_compile_options(ps4rtgpu PRIVATE -Wno-deprecated-declarations -Wno-missing-field-initializers)
 # Runtime symbols (runtime_memory_*, runtime_process_*) resolve against ps4rt-probe.
-if (NOT WIN32)
-    target_link_options(ps4rtgpu PRIVATE -Wl,--allow-shlib-undefined)
-endif()
+target_link_options(ps4rtgpu PRIVATE -Wl,--allow-shlib-undefined)
 target_link_libraries(ps4rtgpu PRIVATE ffx-vulkan::portable ffx-vulkan::fsr4-v07-vulkan)
 target_link_libraries(ps4rtgpu PUBLIC Vulkan::Headers fmt::fmt Boost::headers magic_enum::magic_enum
     tsl::robin_map GPUOpen::VulkanMemoryAllocator PkgConfig::XXHASH PkgConfig::SDL3 PkgConfig::FFMPEG miniz::miniz Zydis::Zydis sirit)
 target_include_directories(ps4rtgpu PRIVATE third_party/xbyak)
-if (WIN32)
-    # Guest code is entered with the System V ABI; NOMINMAX/WIN32_LEAN_AND_MEAN keep
-    # <windows.h> out of the way of std::min/max and the Vulkan/SDL headers.
-    target_compile_definitions(ps4rtgpu PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_compile_options(ps4rtgpu PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/shim/ps4rt_win_compat.h)
-    target_link_libraries(ps4rtgpu PUBLIC Vulkan::Vulkan ws2_32 bcrypt ntdll synchronization winmm pdh)
-else()
-    target_link_libraries(ps4rtgpu PUBLIC PkgConfig::X11)
-endif()
+target_link_libraries(ps4rtgpu PUBLIC PkgConfig::X11)
 
 
 # Focused regressions for the shipped title's rendering and transition fixes.
