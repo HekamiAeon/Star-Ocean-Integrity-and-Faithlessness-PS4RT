@@ -8,6 +8,7 @@ import argparse
 import os
 from pathlib import Path
 import re
+import shlex
 import sys
 from prepare import load_sfo, prepare
 from link_modules import link
@@ -60,6 +61,14 @@ def main(argv=None) -> int:
                PS4RT_PARTIAL_HEIGHT_VIEWS='0', PS4RT_UPSCALER='off')
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
+    # Restart through the player launcher, preserving the selected game and options.
+    # The raw runtime cannot reconstruct --game once Python execs it.
+    restart = [sys.executable, str(Path(__file__).resolve()), '--game', str(game)]
+    if args.upscaler is not None:
+        restart += ['--upscaler', args.upscaler]
+    if args.output_resolution is not None:
+        restart += ['--output-resolution', args.output_resolution]
+    env['PS4RT_RESTART_COMMAND'] = shlex.join(restart)
     # Load local game art with a stable absolute path, regardless of launch cwd.
     # A manually specified background overrides this default.
     if not env.get('PS4RT_OVERLAY_BACKGROUND'):
