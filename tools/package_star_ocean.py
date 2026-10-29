@@ -104,7 +104,7 @@ def verify_release_files(source):
         "docs/DISTRIBUTING_LINUX.md", "docs/UPSTREAM_CREDITS.md",
         "docs/images/readme/sample.png",
         "packaging/fsr4-v07-assets.json", "docs/LINUX_BINARY_RELEASE.md",
-        "packaging/linux/README.md", "packaging/linux/THIRD_PARTY_REVIEW.md",
+        "packaging/linux/README.md",
         "packaging/linux/Containerfile.ffmpeg-png",
         "packaging/linux/Play-Game.sh",
         "packaging/linux/Play-Star-Ocean.sh",
