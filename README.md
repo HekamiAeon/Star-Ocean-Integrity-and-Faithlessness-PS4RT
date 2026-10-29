@@ -22,30 +22,34 @@ not affiliated with Square Enix, Sony, or AMD.
 
 **Want to play the game? Use the prebuilt Linux release. You do not need to compile PS4RT or install FFmpeg, SDL3, or other bundled application libraries.**
 
-1. **Download:** Go to the [latest GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest) and download the **`star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz`** file. This is the game runtime; the separately labeled `source` archive is for developers.
+1. **Download:** Open the [v1.2 GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) and download the **`star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`** file. The separately named **`star-ocean-5-ps4rt-source-7010cc2.tar.gz`** archive is for developers. v1.2 supersedes v1.1; earlier versions remain available for rollback.
 2. **Have your own extracted PS4 game:** The launcher needs an already extracted, plaintext **`CUSA03219` folder** containing `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and the game's data. **Point to the CUSA03219 folder itself**, not the PKG, not its parent directory, and not the `eboot.bin` file.
 3. **Extract the Linux download** (using your file manager's Extract option, or the commands below).
 4. **Launch the game** using the command below, replacing the example game path with the real location of your `CUSA03219` folder:
 
 ```bash
-tar -xzf star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz
-cd star-ocean-5-ps4rt-linux-x86_64-412d2b1
-bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
+bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
 
-**That's all you need to launch it.** Keep the extracted release folder together and writable. The first launch prepares the game's working files locally; it does not modify your original game extraction. Paths containing spaces must be inside quotes, as shown.
+On later launches, the validated game folder is remembered, so run `bash Play-Game.sh` without an argument. Explicit `--game` always takes priority and updates the remembered location. `Play-Star-Ocean.sh` remains a compatibility alias for existing shortcuts.
+
+**That's it.** There is no `LD_LIBRARY_PATH` setup, and no need to compile the game.
+
+Leave the extracted release folder together. The first launch creates local working data under `out/CUSA03219/` by default; your game extraction is read rather than overwritten. Quote paths containing spaces. If no valid game folder is configured, the launcher prints an example `--game` command and refers you to `PLAYER_README.txt`. No graphical folder picker or Tkinter installation is needed. The optional `--data-dir` selects a different private data directory, which must be supplied again on later launches.
 
 **Graphics are controlled in-game.** Hold **L2** and **click the right stick (R3)** to open the graphics settings. On a keyboard, press **Insert**. Choose the resolution (1080p, 1440p, 4K), upscaling (Off, FSR 3.1, or FSR 4 v07 where supported), sharpening, AF, and Sync/Async shader compilation. Use the D-pad, Cross to confirm, and Circle to go back.
 
 **You do NOT need to specify FSR or resolution at launch.** Those command-line options are entirely optional. If you prefer, you can start directly with FSR 4 and 4K output:
 
 ```bash
-bash Play-Star-Ocean.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
+bash Play-Game.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
 ```
 
 **IMPORTANT: Changing anisotropic filtering (AF) requires restarting the game.** The other graphics settings above apply without a restart.
 
-**Player requirements:** x86-64 Linux with glibc **2.35 or newer**, Python 3, a working Vulkan loader/driver, and compatible host display/input libraries. Required app libraries such as FFmpeg 8 and SDL3 are already in the download. No `LD_LIBRARY_PATH` command is needed. Fedora gameplay is verified; Steamdeck systems (SteamOS) have been confirmed to work.
+**Player requirements:** x86-64 Linux with glibc **2.35 or newer**, Python 3, a working Vulkan loader/driver, and compatible host display/input libraries. Required app libraries such as FFmpeg 8 and SDL3 are already in the download. No `LD_LIBRARY_PATH` command is needed. Fedora gameplay has been tested. Steam Deck operation has been reported, but broader independent SteamOS and other-distribution validation remains pending.
 
 **Architecture support:** The prebuilt runtime targets **native x86-64 (AMD64) CPUs only**. ARM64 devices, including Snapdragon-based handhelds running Linux through FEX or Box64, are **not supported or validated**. Such translation layers may start the game, but correct execution and stability are not guaranteed. An ARM-compatible Linux distribution does not remove the CPU translation requirement.
 
@@ -80,6 +84,7 @@ been independently verified.
     more reliable rendering.
   - **Async:** smoother gameplay during shader loading, with occasional brief
     visual flickers in some areas.
+- **Restart Game** in the graphics menu asks for confirmation before restarting. Save in-game progress first; restarting does not create a game save.
 - **Exit Game** in the graphics menu requests confirmation before returning
   to the Linux desktop. Save your in-game progress first; this action does
   not trigger an automatic game save.
@@ -96,7 +101,7 @@ dependencies**, not cached shaders compiled from the game.
 
 ## Build from source (developers only)
 
-**Downloaded the prebuilt Linux release? Skip this section.** The commands below are for contributors compiling PS4RT; players should use the `Play-Star-Ocean.sh` instructions above.
+**Downloaded the prebuilt Linux release? Skip this section.** The commands below are for contributors compiling PS4RT; players should use the `Play-Game.sh` instructions above.
 
 From a source checkout, install a C/C++ toolchain, CMake, Ninja, pkg-config, Python 3, and development packages for Vulkan, SDL3, FFmpeg, fmt, Boost, xxhash, robin-map, Vulkan Memory Allocator, Zydis, glslang, and X11. Included third-party source components are built as needed.
 
@@ -134,10 +139,13 @@ The source checkout stores generated game code, settings, saves, and GPU
 caches under `out/CUSA03219/`. Notable paths include:
 
 - `out/CUSA03219/ps4rt.ini`: saved in-game graphics settings.
+- `out/CUSA03219/game-folder.txt`: remembered validated game directory.
 - `out/CUSA03219/user/savedata/`: game save data.
 - `out/CUSA03219/user/savedata-backups/`: save backups, when present.
 - `out/CUSA03219/user/gpu/cache/CUSA03219/`: generated GPU shaders
   and pipeline caches, when present.
+
+Pass `--data-dir "/your/private/path"` to keep working data elsewhere. Use the same option on subsequent launches; it does not move existing saves automatically.
 
 **Never publish the `out/` directory.** Prepared game executables and
 linked data can contain proprietary game material, while savedata and caches

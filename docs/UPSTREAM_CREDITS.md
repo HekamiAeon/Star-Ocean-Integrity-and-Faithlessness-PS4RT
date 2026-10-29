@@ -32,7 +32,7 @@ contributors remain credited here even where their game-specific features were r
 This project retains source-level copyright, SPDX and license notices.
 The project license is [GPL-2.0-or-later](../LICENSE). Adapted files and vendored
 dependencies keep their original license notices under their respective source
-directories. Source builds may link local system dependencies. The Linux v1.1 binary archive bundles audited FFmpeg and other application libraries with independent redistribution terms.
+directories. Source builds may link local system dependencies. The Linux v1.2 binary archive bundles audited FFmpeg and other application libraries with independent redistribution terms.
 
 FSR-Vulkan/AMD FidelityFX, ImGui, LibAtrac9, Sirit, half, xbyak, miniz, magic_enum,
 DejaVu fonts, and additional vendored libraries retain their own authors and licenses.

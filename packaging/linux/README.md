@@ -13,9 +13,7 @@ missing save thumbnails.
 
 The image recipes use versioned source dependencies, but some base images
 and conda package builds remain unpinned. They are not a fully hermetic or
-bitwise reproducible compiler pipeline. The previously playtested binaries
-and library bundle remain the v1.1 source of truth unless a rebuilt runtime
-is separately ABI-audited and gameplay-tested.
+bitwise reproducible compiler pipeline. The v1.2 portable runtime was audited and gameplay smoke-tested on Fedora. Future build changes must be separately audited and gameplay-tested.
 
 ## Create both archives after committing reviewed changes
 
@@ -36,9 +34,8 @@ release naming pattern:
 
 Runtime packaging copies **only two verified ELF binaries** and **12
 allowlisted shared libraries** from the game-tested folder, along with the
-committed source/assets. It does not copy user saves, generated game files,
+committed source/assets. The player package includes `Play-Game.sh`, its legacy alias, `PLAYER_README.txt`, and the checked-in overlay PNG and WAV files, but not the `docs/` tree. The packager checks the bundle revision and requires matching media assets. It does not copy user saves, generated game files,
 shaders caches, build logs or extracted game data. No global `LD_LIBRARY_PATH`
 necessary. Host still needs glibc >=2.35, Vulkan graphics stack and Python3.
 
-Before publishing: complete `packaging/linux/THIRD_PARTY_REVIEW.md`; test
-a freshly extracted final archive and on SteamOS.
+Maintain applicable license and source notices (see `docs/UPSTREAM_CREDITS.md` and `packaging/linux/THIRD_PARTY_REVIEW.md`). Independently test other distributions, including SteamOS, before claiming verified compatibility.
