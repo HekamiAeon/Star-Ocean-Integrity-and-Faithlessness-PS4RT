@@ -24,10 +24,18 @@ class PlayerReleaseLayoutTests(unittest.TestCase):
             'gpu/third_party/imgui/LICENSE.txt',
         }
         source = {name: name.encode() for name in paths}
-        modes = {name: 0o644 for name in paths}
+        # The player README and launchers are tracked source files.
+        for name in ('PLAYER_README.txt', 'Play-Game.sh', 'Play-Star-Ocean.sh'):
+            source['packaging/linux/' + name] = (
+                SCRIPT.parents[1] / 'packaging/linux' / name).read_bytes()
+        modes = {name: 0o644 for name in source}
         with patch.object(packager, 'host_elf', return_value=b'fake-ELF'):
             player = packager.runtime_entries(source, modes)
+        self.assertIn('Play-Game.sh', player)
         self.assertIn('Play-Star-Ocean.sh', player)
+        self.assertEqual(player['Play-Game.sh'][1], 0o755)
+        self.assertEqual(player['Play-Star-Ocean.sh'][1], 0o755)
+        self.assertIn(b'Play-Game.sh', player['Play-Star-Ocean.sh'][0])
         self.assertIn('PLAYER_README.txt', player)
         self.assertIn('LICENSE', player)
         self.assertIn('CREDITS.md', player)
@@ -38,6 +46,8 @@ class PlayerReleaseLayoutTests(unittest.TestCase):
         self.assertTrue(all(not name.startswith(('docs/', 'source/'))
                             for name in player), sorted(player))
         self.assertIn(b'github.com/HekamiAeon/', player['PLAYER_README.txt'][0])
+        self.assertIn(b'bash Play-Game.sh --game', player['PLAYER_README.txt'][0])
+        self.assertIn(b'bash Play-Game.sh\n', player['PLAYER_README.txt'][0])
         with tempfile.TemporaryDirectory() as temp:
             dest = Path(temp) / 'player.tar.gz'
             packager.export(dest, 'test-player', 'abcdef0123456', 'linux-x86_64', player)

@@ -106,6 +106,9 @@ def verify_release_files(source):
         "packaging/fsr4-v07-assets.json", "docs/LINUX_BINARY_RELEASE.md",
         "packaging/linux/README.md", "packaging/linux/THIRD_PARTY_REVIEW.md",
         "packaging/linux/Containerfile.ffmpeg-png",
+        "packaging/linux/Play-Game.sh",
+        "packaging/linux/Play-Star-Ocean.sh",
+        "packaging/linux/PLAYER_README.txt",
     }
     for name in sorted(required - set(source)):
         raise SystemExit("Missing required release file: " + name)
@@ -195,19 +198,14 @@ def runtime_entries(source, modes):
     # Keep upstream attribution available offline without a docs/ folder.
     if "docs/UPSTREAM_CREDITS.md" in source:
         package["CREDITS.md"] = (source["docs/UPSTREAM_CREDITS.md"], 0o644)
+    # One tracked player README and launcher implementation for both the
+    # tested build bundle and final release. Keep the historical launcher alias.
     package["PLAYER_README.txt"] = (
-        b"Star Ocean: Integrity and Faithlessness - PS4RT for Linux x86-64\n"
-        b"Run: bash Play-Star-Ocean.sh --game \"/path/to/CUSA03219\"\n"
-        b"Instructions: https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT\n"
-        b"Requires your own plaintext extracted PS4 game. No game files included.\n",
-        0o644,
-    )
-    launcher = (
-        '#!/usr/bin/env bash\nset -euo pipefail\n'
-        'cd -- "$(dirname -- "$0")"\n'
-        'exec bash run.sh "$@"\n'
-    ).encode()
-    package["Play-Star-Ocean.sh"] = (launcher, 0o755)
+        source["packaging/linux/PLAYER_README.txt"], 0o644)
+    package["Play-Game.sh"] = (
+        source["packaging/linux/Play-Game.sh"], 0o755)
+    package["Play-Star-Ocean.sh"] = (
+        source["packaging/linux/Play-Star-Ocean.sh"], 0o755)
     for name, path in BINARIES.items():
         package[name] = (host_elf(path), 0o755)
     return package
@@ -259,12 +257,26 @@ def main():
     if args.runtime != (args.bundle_from is not None):
         raise SystemExit("Runtime packages require --runtime --bundle-from <audited-bundle>; "
                          "omit both for source packages")
-    if args.runtime:
-        files = verify_bundle(args.bundle_from.expanduser().resolve())
-        BINARIES.clear()
-        BINARIES.update({name: files[name] for name in EXPECTED_RUNPATH})
     revision, source, modes = committed_source()
     verify_release_files(source)
+    if args.runtime:
+        bundle = args.bundle_from.expanduser().resolve()
+        # Never attach binaries from another commit to a manifest for HEAD.
+        provenance = bundle.parent / "source-revision.txt"
+        if not provenance.is_file() or provenance.read_text().strip() != revision:
+            raise SystemExit("Bundle revision does not match committed source. "
+                             "Rebuild with packaging/linux/build-runtime.sh.")
+        # The build must contain exactly the reviewed source's overlay media.
+        for name in ("gpu/assets/star_ocean_overlay.png",
+                     "gpu/assets/sounds/navigate.wav",
+                     "gpu/assets/sounds/confirm.wav",
+                     "gpu/assets/sounds/cancel.wav"):
+            path = bundle / name
+            if not path.is_file() or path.read_bytes() != source[name]:
+                raise SystemExit("Missing or mismatched build overlay asset: " + name)
+        files = verify_bundle(bundle)
+        BINARIES.clear()
+        BINARIES.update({name: files[name] for name in EXPECTED_RUNPATH})
     kind = "linux-x86_64" if args.runtime else "source"
     name = f"star-ocean-5-ps4rt-{kind}-{revision[:7]}"
     items = (runtime_entries(source, modes) if args.runtime else
