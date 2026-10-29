@@ -51,8 +51,8 @@ class PlayerLauncherTests(unittest.TestCase):
         self.assertEqual(saved.read_text().strip(), str(self.one))
         _, prepare, _, _, execute = self.call()
         self.assertEqual(prepare.call_args.args[0], self.one)
-        self.assertEqual(execute.call_args.args[1][3], '--app0')
-        self.assertEqual(execute.call_args.args[1][4], str(self.one))
+        self.assertEqual(execute.call_args.args[1][2], '--app0')
+        self.assertEqual(execute.call_args.args[1][3], str(self.one))
 
     def test_explicit_override_updates_memory(self):
         self.call('--game', str(self.one))
