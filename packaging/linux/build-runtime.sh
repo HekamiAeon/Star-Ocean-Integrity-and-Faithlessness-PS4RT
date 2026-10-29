@@ -128,6 +128,8 @@ fi
 # Game-derived files will be generated ONLY inside $STAGE/out/<CUSAxxxxx> if
 # the developer explicitly launches this stage for a smoke test.
 cp -a -- "$SOURCE/scripts" "$SOURCE/run.sh" "$STAGE/"
+cp -a -- "$SOURCE/packaging/linux/Play-Game.sh" "$SOURCE/packaging/linux/Play-Star-Ocean.sh" "$STAGE/"
+cp -a -- "$SOURCE/packaging/linux/PLAYER_README.txt" "$STAGE/PLAYER_README.txt"
 cp -a -- "$SOURCE/fsr4_shaders" "$STAGE/"
 mkdir -p "$STAGE/gpu"
 cp -a -- "$SOURCE/gpu/assets" "$STAGE/gpu/"

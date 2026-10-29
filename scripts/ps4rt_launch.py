@@ -7,7 +7,6 @@ Future games require reverse engineering and source changes. Not a general PS4 e
 import argparse
 import os
 from pathlib import Path
-import re
 import shlex
 import sys
 from prepare import load_sfo, prepare
@@ -15,29 +14,51 @@ from link_modules import link
 from content_profile import prepare as prepare_content
 
 ROOT = Path(__file__).resolve().parent.parent
-TITLE_ID_PATTERN = re.compile(r'CUSA\d{5}\Z')
-
-
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--game', type=Path, required=True,
-                        help='Your extracted plaintext CUSAxxxxx game directory')
+    parser.add_argument('--game', type=Path,
+                        help='Your extracted plaintext CUSA03219 game directory')
+    parser.add_argument('--data-dir', type=Path,
+                        help='Optional private folder for this title, including saves and settings')
     parser.add_argument('--prepare-only', action='store_true')
     parser.add_argument('--upscaler', choices=('off', 'fsr3', 'fsr4'),
                         help='Override the saved graphics setting for this launch')
     parser.add_argument('--output-resolution', choices=('1080', '1440', '4k'))
     args = parser.parse_args(argv)
-    game = args.game.expanduser().resolve()
-    title_id = str(load_sfo(game / 'sce_sys/param.sfo').get('TITLE_ID', ''))
-    if not TITLE_ID_PATTERN.fullmatch(title_id):
-        parser.error('Expected a PS4 game with CUSAxxxxx TITLE_ID in param.sfo')
+
+    # Keep the existing default layout: out/CUSA03219 contains game-derived
+    # prepared files, game-folder.txt, graphics settings, saves and GPU caches.
+    out = (args.data_dir.expanduser().resolve() if args.data_dir is not None
+           else ROOT / 'out/CUSA03219')
+    remembered = out / 'game-folder.txt'
+    if args.game is not None:
+        game = args.game.expanduser().resolve()
+    else:
+        if not remembered.is_file() or not remembered.read_text().strip():
+            raise ValueError('Game folder not configured. First launch: '
+                             'bash Play-Game.sh --game "/absolute/path/to/CUSA03219"\n'
+                             'Refer to PLAYER_README.txt for details.')
+        game = Path(remembered.read_text().strip()).expanduser().resolve()
+
+    # Validate before preparing anything or replacing the remembered path.
+    if not game.is_dir():
+        raise ValueError(f'Game folder not found: {game}. '
+                         'Supply --game "/absolute/path/to/CUSA03219"')
+    sfo = game / 'sce_sys/param.sfo'
+    if not sfo.is_file():
+        raise ValueError(f'Missing sce_sys/param.sfo in game folder: {game}')
+    title_id = str(load_sfo(sfo).get('TITLE_ID', ''))
+    if title_id != 'CUSA03219':
+        raise ValueError('This port requires CUSA03219; select that extracted game folder')
     runtime = ROOT / 'out/ps4rt'
     if not args.prepare_only and not runtime.is_file():
         parser.error('Build the runtime first: bash build.sh')
-    out = ROOT / 'out' / title_id
     prepare(game, out)
     link(game, out)
     prepare_content(game, out, 'full')
+    # Only remember a successfully validated and prepared location.
+    out.mkdir(parents=True, exist_ok=True)
+    remembered.write_text(str(game) + '\n')
     if args.prepare_only:
         return 0
     user_dir = out / 'user'
@@ -64,6 +85,8 @@ def main(argv=None) -> int:
     # Restart through the player launcher, preserving the selected game and options.
     # The raw runtime cannot reconstruct --game once Python execs it.
     restart = [sys.executable, str(Path(__file__).resolve()), '--game', str(game)]
+    if args.data_dir is not None:
+        restart += ['--data-dir', str(out)]
     if args.upscaler is not None:
         restart += ['--upscaler', args.upscaler]
     if args.output_resolution is not None:
