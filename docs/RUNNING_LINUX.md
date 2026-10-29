@@ -4,19 +4,21 @@ This is an experimental, game-specific native x86-64 Linux compatibility runtime
 
 You must supply your own **extracted, plaintext** CUSA03219 game folder. Neither this repository nor the launcher includes the game, PS4 firmware, package decryption tools, or downloads.
 
-## Download and run v1.1 (no compiling)
+## Download and run v1.2 (no compiling)
 
-**Playing the game? Download the Linux runtime archive from the [latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest).** Choose `star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz`, not the source archive.
+**Playing the game? Download the Linux runtime archive from the [v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2).** Choose `star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`, not the source archive.
 
 1. Have your own extracted, plaintext `CUSA03219` directory. It must contain `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and the game's data. Do not point to a `.pkg`, `eboot.bin` alone, or the parent of `CUSA03219`.
 2. Extract the downloaded `.tar.gz` with your file manager, or run the extraction commands below.
-3. Open a terminal **inside the extracted Linux release folder**, then run `bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"`. Replace the example path with your real one and keep quotes if it contains spaces.
+3. Open a terminal **inside the extracted Linux release folder**, then run `bash Play-Game.sh --game "/path/to/CUSA03219"`. Replace the example path with your real one and keep quotes if it contains spaces.
 
 ```bash
-tar -xzf star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz
-cd star-ocean-5-ps4rt-linux-x86_64-412d2b1
-bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
+bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
+
+After the first successful launch, run `bash Play-Game.sh` without `--game` to reuse the remembered game folder. Supplying `--game` again overrides it. If no valid location is configured, the launcher gives an example command and directs you to `PLAYER_README.txt`. `Play-Star-Ocean.sh` remains as a compatibility alias; no Tkinter picker is provided.
 
 **No library installation step is necessary for FFmpeg, SDL3, fmt, Zydis, or the other bundled application libraries.** No `LD_LIBRARY_PATH` setting or source compilation is required. You still need x86-64 Linux, glibc 2.35+, Python 3, and a working host Vulkan graphics/display stack.
 
@@ -27,7 +29,7 @@ bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"
 **FSR and resolution command-line arguments are optional.** You can set everything in the graphics menu. If you want launch-time overrides, this works too:
 
 ```bash
-bash Play-Star-Ocean.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
+bash Play-Game.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
 ```
 
 **IMPORTANT: AF (anisotropic filtering) changes require a game restart to take effect.** Resolution, upscaling, sharpening, and Sync/Async shader compilation apply live. The menu saves changed settings when it closes.
@@ -69,7 +71,7 @@ bash run.sh \
   --output-resolution 4k
 ~~~
 
-`--upscaler` accepts `off`, `fsr3`, or `fsr4`; `--output-resolution` accepts `1080`, `1440`, or `4k`. These are optional launch-time overrides. Without them, select the graphics options inside the PS4RT overlay. The launcher **requires** `--game`: this release has no folder-selection dialog or remembered game path.
+`--upscaler` accepts `off`, `fsr3`, or `fsr4`; `--output-resolution` accepts `1080`, `1440`, or `4k`. These are optional launch-time overrides. Without them, select the graphics options inside the PS4RT overlay. The launcher requires `--game` only for first-time setup or to change the remembered game directory. No graphical folder picker is available. By default, Star Ocean stores working files, saves, and the remembered path in `out/CUSA03219/`. Pass `--data-dir` to use a different private folder, and supply it again on later launches. Restart Game preserves the game path and launch-time graphics overrides.
 
 The game folder must include `sce_sys/param.sfo` with the appropriate title ID, `eboot.bin`, `sce_module/` and its required game data. The input must already be extracted and usable; the launcher does not decrypt encrypted game packages.
 
@@ -81,11 +83,12 @@ bash run.sh --game /path/to/your/CUSA03219 --prepare-only
 
 ### Local files, saves, and shader caches
 
-A source checkout stores its generated working files under `out/CUSA03219/`:
+A source checkout stores its generated working files under `out/CUSA03219/` by default; `--data-dir` selects another private folder:
 
 | Location | Purpose |
 | --- | --- |
 | `out/CUSA03219/ps4rt.ini` | Saved graphics preferences, including Sync/Async |
+| `out/CUSA03219/game-folder.txt` | Remembered game directory |
 | `out/CUSA03219/user/savedata/` | In-game saves |
 | `out/CUSA03219/user/savedata-backups/` | Save backups, when generated |
 | `out/CUSA03219/user/gpu/cache/CUSA03219/` | Generated game shaders and Vulkan pipeline caches, when present |
@@ -144,7 +147,7 @@ Press **Insert**, or hold **L2** and click **R3**, to open the custom Star Ocean
 
 Resolution, upscaler selection, sharpening, and shader compilation mode apply live; **IMPORTANT: changing anisotropic filtering (AF) requires restarting the game**. The overlay saves changed settings when you close it. The game renders its original 1080p scene before display reconstruction, so a 4K output is not native 4K game rendering. There is no bundled 60 FPS patch or frame-generation mode.
 
-To quit, choose **Exit Game**, then confirm **Exit to desktop**. Cancel or Circle/Escape returns to the game. **Save progress inside Star Ocean before exiting**; saving PS4RT graphics settings is not a game save.
+To restart, choose **Restart Game** and confirm. To quit, choose **Exit Game**, then confirm **Exit to desktop**. Cancel or Circle/Escape returns to the game. **Save progress inside Star Ocean before exiting**; saving PS4RT graphics settings is not a game save.
 
 FSR 3.1 is part of the runtime. The FSR 4 v07 shader/model files and license notice are in `fsr4_shaders/`; they are required renderer dependencies, **not** game shader cache files. FSR 4 needs compatible Vulkan GPU features. If it is unavailable, use FSR 3.1. See the [Linux distribution guide](DISTRIBUTING_LINUX.md).
 

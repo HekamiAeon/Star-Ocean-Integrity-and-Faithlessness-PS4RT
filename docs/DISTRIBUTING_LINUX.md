@@ -6,15 +6,17 @@ This document explains how to build and distribute the **Star Ocean: Integrity a
 
 ## For players: download, extract, run
 
-**Do not compile from source to play v1.1.** Download the Linux runtime archive from the [latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest). Choose `star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz`, not the source archive.
+**Do not compile from source to play v1.2.** Download the Linux runtime archive from the [v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2). Choose `star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`, not the source archive.
 
 Extract the download and open a terminal in the extracted folder:
 
 ```bash
-tar -xzf star-ocean-5-ps4rt-linux-x86_64-412d2b1.tar.gz
-cd star-ocean-5-ps4rt-linux-x86_64-412d2b1
-bash Play-Star-Ocean.sh --game "/path/to/CUSA03219"
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
+bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
+
+Subsequent launches can use `bash Play-Game.sh` without `--game`; the launcher remembers the validated game location. Use `--game` again if the folder moves. `Play-Star-Ocean.sh` remains a compatibility alias.
 
 Replace `/path/to/CUSA03219` with the path to **your extracted plaintext game folder**. It must contain `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and game data. Do not supply the PKG, an executable file, or the parent folder.
 
@@ -58,9 +60,9 @@ Source builds generate output under `out/CUSA03219/`:
 | `out/CUSA03219/user/savedata/` and `savedata-backups/` | Player saves and backups |
 | `out/CUSA03219/user/gpu/cache/CUSA03219/` | Generated game shader and pipeline caches |
 
-These files are **local and private**. Do not distribute any `out/` contents, PS4 system modules, firmware, screenshots or captures from user directories by accident. The game's original input folder is read rather than copied into the repository. `--data-dir` is not supported by this launcher.
+These files are **local and private**. Do not distribute any `out/` contents, PS4 system modules, firmware, screenshots or captures from user directories by accident. The game's original input folder is read rather than copied into the repository. The launcher also remembers the selected game directory under `out/CUSA03219/`. The optional `--data-dir` selects a different private working-data location; reuse that option on subsequent launches. Existing saves are not moved automatically.
 
-To exit, choose **Exit Game** in the overlay and confirm **Exit to desktop**. Save in-game first; changing graphics settings does not save gameplay progress.
+To restart, choose **Restart Game** in the overlay and confirm. To exit, choose **Exit Game** and confirm **Exit to desktop**. Save in-game first; changing graphics settings does not save gameplay progress.
 
 ## Maintainer instructions
 
@@ -75,7 +77,7 @@ python3 tools/package_star_ocean.py --runtime --bundle-from "$BUNDLE"
 (cd out/community && sha256sum -c *.sha256)
 ~~~
 
-The source and Linux x86-64 archives keep the original filenames and commit suffix. Runtime packaging uses an allowlist of two tested ELF files and twelve audited shared libraries from the tested build. The exporter includes corresponding PS4RT source under `source/` and excludes game files, linked game code, saves and GPU caches.
+The source and Linux x86-64 archives keep the original filenames and commit suffix. Runtime packaging uses an allowlist of two tested ELF files and twelve audited shared libraries from the tested build. The separately published source archive contains the corresponding PS4RT source. The player archive excludes the `docs/` tree, game files, linked game code, saves and GPU caches; the required credits and licenses remain available offline.
 
 See [`packaging/linux/README.md`](../packaging/linux/README.md) for build stages, `$ORIGIN` path validation and glibc requirements. Before public binary redistribution, complete the third-party [license/source review](../packaging/linux/THIRD_PARTY_REVIEW.md). Independent Steam Deck testing is still pending.
 
