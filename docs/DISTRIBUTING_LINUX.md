@@ -79,7 +79,7 @@ python3 tools/package_star_ocean.py --runtime --bundle-from "$BUNDLE"
 
 The source and Linux x86-64 archives keep the original filenames and commit suffix. Runtime packaging uses an allowlist of two tested ELF files and twelve audited shared libraries from the tested build. The separately published source archive contains the corresponding PS4RT source. The player archive excludes the `docs/` tree, game files, linked game code, saves and GPU caches; the required credits and licenses remain available offline.
 
-See [`packaging/linux/README.md`](../packaging/linux/README.md) for build stages, `$ORIGIN` path validation and glibc requirements. Before public binary redistribution, complete the third-party [license/source review](../packaging/linux/THIRD_PARTY_REVIEW.md). Independent Steam Deck testing is still pending.
+See [`packaging/linux/README.md`](../packaging/linux/README.md) for build stages, `$ORIGIN` path validation and glibc requirements, and [upstream credits and notices](UPSTREAM_CREDITS.md) for provenance and license information. Independently verify any applicable third-party binary redistribution obligations. Independent Steam Deck testing is still pending.
 
 ### License and provenance
 

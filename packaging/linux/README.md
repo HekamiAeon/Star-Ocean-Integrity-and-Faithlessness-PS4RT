@@ -38,4 +38,4 @@ committed source/assets. The player package includes `Play-Game.sh`, its legacy 
 shaders caches, build logs or extracted game data. No global `LD_LIBRARY_PATH`
 necessary. Host still needs glibc >=2.35, Vulkan graphics stack and Python3.
 
-Maintain applicable license and source notices (see `docs/UPSTREAM_CREDITS.md` and `packaging/linux/THIRD_PARTY_REVIEW.md`). Independently test other distributions, including SteamOS, before claiming verified compatibility.
+Keep applicable third-party license and source notices intact (see [`docs/UPSTREAM_CREDITS.md`](../../docs/UPSTREAM_CREDITS.md) and the included license files). Independently test other distributions, including SteamOS, before claiming verified compatibility.
