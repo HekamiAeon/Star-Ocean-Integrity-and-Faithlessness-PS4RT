@@ -113,8 +113,44 @@ def verify_release_files(source):
     for name in sorted(required - set(source)):
         raise SystemExit("Missing required release file: " + name)
     lock = json.loads(source["packaging/fsr4-v07-assets.json"])
-    if len(lock["files"]) != 189:
-        raise SystemExit("Unexpected FSR4 asset list.")
+    expected = set(lock["files"])
+    present = {
+        name for name in source
+        if name.startswith("fsr4_shaders/")
+    }
+    if present != expected:
+        raise SystemExit(
+            f"FSR4 inventory mismatch: missing={len(expected - present)}, "
+            f"unverified={len(present - expected)}"
+        )
+
+    tiers = lock.get("output_tiers")
+    if tiers != ["1080", "2160", "4320"]:
+        raise SystemExit("Unexpected FSR4 output tiers.")
+
+    presets = (
+        "native", "quality", "balanced",
+        "performance", "ultraperf", "drs"
+    )
+    stages = ("pre", "post") + tuple(
+        f"pass{i}" for i in range(1, 13)
+    )
+    required = set()
+    for preset in presets:
+        stem = f"fsr4_shaders/fsr4_model_v07_i8_{preset}"
+        required.update((
+            stem + "_shader_manifest.json",
+            stem + "_initializers.bin",
+            stem + "_pre_weights.bin"
+        ))
+        for tier in tiers:
+            required.update(
+                f"{stem}_{tier}_{stage}.spv"
+                for stage in stages
+            )
+
+    if not required.issubset(expected):
+        raise SystemExit("Incomplete FSR4 shader tier coverage.")
     for name, metadata in lock["files"].items():
         data = source.get(name)
         if data is None or len(data) != metadata["size"] or checksum(data) != metadata["sha256"]:
