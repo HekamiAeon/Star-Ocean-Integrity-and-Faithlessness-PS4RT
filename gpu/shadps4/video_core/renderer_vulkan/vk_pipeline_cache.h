@@ -102,6 +102,8 @@ struct PipelineSelection {
     bool motion = false;
     bool motion_requested = false; ///< settings snapshot for prepared-pipeline validation
     bool compilation_pending = false;
+    // An executing draw must finish selection even if background compilation is busy.
+    bool require_complete = false;
     DrawIndirectParams draw_indirect_params{};
     struct PrepWorker* worker{}; ///< set: read-only selection for a draw-preparation worker
 };

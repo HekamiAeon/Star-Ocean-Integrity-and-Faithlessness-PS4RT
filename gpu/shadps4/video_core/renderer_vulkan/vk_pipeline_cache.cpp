@@ -720,10 +720,23 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
     }
     sel.draw_indirect_params = params;
     if (!RefreshGraphicsKey(sel)) {
-        if (sel.compilation_pending) {
-            ++g_ps4rt_pending_draws;
+        if (!sel.compilation_pending) {
+            return nullptr;
         }
-        return nullptr;
+        // A draw may generate a texture only once. Dropping it while compilation is
+        // pending lets later compute/draws consume an image that was never produced.
+        // Finish queued shader work, then select the remaining stages synchronously.
+        // This also handles a full compiler queue without losing the current draw.
+        {
+            PhaseTimer waiting{g_ps4rt_compile_wait_ns};
+            PublishShaders(true);
+        }
+        sel.require_complete = true;
+        const bool ready = RefreshGraphicsKey(sel);
+        sel.require_complete = false;
+        if (!ready) {
+            return nullptr; // A real compilation/stage failure, rather than pending work.
+        }
     }
     if (AsyncCompilation() && !sel.regs->stage_enable.hs_en && !EmulatorSettings.IsShaderCollect()) {
         const auto found = graphics_pipelines.find(sel.graphics_key);
@@ -760,8 +773,17 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
                 pending_graphics.emplace(sel.graphics_key, std::move(build));
             }
         }
-        ++g_ps4rt_pending_draws;
-        return nullptr;
+        if (const auto pending = pending_graphics.find(sel.graphics_key);
+            pending != pending_graphics.end()) {
+            {
+                PhaseTimer waiting{g_ps4rt_compile_wait_ns};
+                pending->second->job.Wait();
+            }
+            PublishGraphics();
+            const auto ready = graphics_pipelines.find(sel.graphics_key);
+            return ready != graphics_pipelines.end() ? ready->second.get() : nullptr;
+        }
+        // No job was accepted (for example, queue capacity): build this pipeline below.
     }
     const auto [it, is_new] = graphics_pipelines.try_emplace(sel.graphics_key);
     if (is_new) {
@@ -1223,7 +1245,8 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
     }
 
     auto it_pgm = program_cache.find(params.hash); // this thread is the only writer
-    const bool compile_async = AsyncCompilation() && hw_stage != HwStage::Compute &&
+    const bool compile_async = AsyncCompilation() && !sel.require_complete &&
+                               hw_stage != HwStage::Compute &&
                                !sel.regs->stage_enable.hs_en &&
                                !EmulatorSettings.IsShaderCollect();
     if (!compile_async && it_pgm != program_cache.end() && it_pgm->second->pending) {
