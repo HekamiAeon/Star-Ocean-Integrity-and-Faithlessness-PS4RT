@@ -10,7 +10,7 @@ class PlayerRestartTests(unittest.TestCase):
         overlay = (ROOT / "gpu/shim/ps4rt_overlay.cpp").read_text()
         compact = overlay.split("void Menu() {", 1)[1].split("constexpr int TabCount", 1)[0]
         self.assertIn('ImGui::Button("Exit Game")', compact)
-        self.assertIn('ImGui::Button("Restart Game")', compact)
+        self.assertIn('"Restart Game###restart_game"', compact)
         self.assertIn('ImGui::BeginPopupModal("Restart game?"', compact)
         self.assertIn('Unsaved game progress will be lost.', compact)
         self.assertRegex(compact, r"Ps4RtSettings::Save\(\);\s+dirty = false;\s+runtime_restart\(\);")

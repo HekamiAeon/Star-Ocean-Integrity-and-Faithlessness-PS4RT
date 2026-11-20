@@ -304,8 +304,60 @@ std::string OverlayText() {
     return P::Format(sample, items, s.overlay_layout == 0);
 }
 
+// The console languages ps4rt_launch.py offers (PS4RT_LANGUAGE_CHOICES: "id=label|...", PS4
+// system language IDs, in menu order). Empty without the launcher. Read once: the environment is
+// fixed for a run. Adapted from the Code Fairy port's language list.
+struct LanguageChoices {
+    std::vector<std::string> names;
+    std::vector<const char*> labels;
+    std::vector<int> ids;
+};
+const LanguageChoices& GameLanguages() {
+    static const LanguageChoices choices = [] {
+        LanguageChoices c;
+        const char* list = std::getenv("PS4RT_LANGUAGE_CHOICES");
+        for (const char* p = list ? list : ""; *p;) {
+            const char* end = std::strchr(p, '|');
+            const std::string entry(p, end ? size_t(end - p) : std::strlen(p));
+            const auto eq = entry.find('=');
+            char* tail = nullptr;
+            const long id = eq == std::string::npos ? -1 : std::strtol(entry.c_str(), &tail, 10);
+            if (eq != std::string::npos && eq > 0 && tail == entry.c_str() + eq && id >= 0 && id <= 30 &&
+                eq + 1 < entry.size()) {
+                c.ids.push_back(int(id));
+                c.names.push_back(entry.substr(eq + 1));
+            }
+            if (!end) break;
+            p = end + 1;
+        }
+        for (const auto& name : c.names) c.labels.push_back(name.c_str());
+        return c;
+    }();
+    return choices;
+}
+
+// Game language: the console language Star Ocean reads when it starts. Shown only when the
+// launcher offers choices that include the language this launch uses.
+void LanguageRow() {
+    auto& s = Ps4RtSettings::Get();
+    const auto& c = GameLanguages();
+    if (s.startup_language < 0 ||
+        std::find(c.ids.begin(), c.ids.end(), s.startup_language) == c.ids.end())
+        return;
+    ChoiceRow("Game language", s.language, c.labels.data(), c.ids.data(), int(c.ids.size()),
+              "The console language the game starts with: its menus, text and subtitles. "
+              "Voices are not changed. Applies after restarting the game.");
+}
+
 void GameTab() {
     auto& s = Ps4RtSettings::Get();
+    if (s.startup_language >= 0 && !GameLanguages().ids.empty()) {
+        ImGui::SeparatorText("Language");
+        if (BeginRows("##language")) {
+            LanguageRow();
+            ImGui::EndTable();
+        }
+    }
     ImGui::SeparatorText("Controller");
     if (BeginRows("##controller")) {
         SliderRow("Vibration", s.vibration, 0, 100, "%d%%",
@@ -360,6 +412,7 @@ void CompactGraphics() {
         }
         Help("Optional sharpening. 0% disables it; larger values can add halos around edges.");
         ImGui::PopID();
+        LanguageRow();
         ImGui::EndTable();
     }
     // Ship the user-facing sync/async choice without resurrecting the
@@ -543,7 +596,7 @@ int RestartChanges() {
     const auto& s = Ps4RtSettings::Get();
     return (s.render_resolution != s.startup_render_resolution) + (s.engine_fps != s.startup_engine_fps) +
            (s.deferred_readback != s.startup_deferred_readback) + (s.stale_readback != s.startup_stale_readback) +
-           (s.anisotropy != s.startup_anisotropy);
+           (s.anisotropy != s.startup_anisotropy) + (s.language != s.startup_language);
 }
 
 // Render game art only within the settings window, below all its controls.
@@ -661,11 +714,14 @@ void Menu() {
             if (ImGui::Button("Exit Game"))
                 ImGui::OpenPopup("Exit game?");
             ImGui::SameLine();
-            if (ImGui::Button("Restart Game"))
+            const int restart_changes = RestartChanges();
+            if (ImGui::Button(restart_changes ? "Apply and restart###restart_game" : "Restart Game###restart_game"))
                 ImGui::OpenPopup("Restart game?");
             // Restart from boot; game progress is saved only inside the game itself.
             if (ImGui::BeginPopupModal("Restart game?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-                ImGui::TextWrapped("Restart the game from the start? Unsaved game progress will be lost.");
+                ImGui::TextWrapped(restart_changes
+                    ? "Restart the game from the start to apply the new settings? Unsaved game progress will be lost."
+                    : "Restart the game from the start? Unsaved game progress will be lost.");
                 ImGui::Spacing();
                 if (ImGui::Button("Cancel") ||
                     ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||

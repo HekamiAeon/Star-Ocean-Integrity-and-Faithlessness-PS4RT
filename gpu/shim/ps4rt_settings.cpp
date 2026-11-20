@@ -207,6 +207,14 @@ void Load() {
     v.startup_deferred_readback = v.deferred_readback;
     v.startup_stale_readback = v.stale_readback;
     v.startup_anisotropy = v.anisotropy;
+    // The console language this launch really uses (after ps4rt_launch.py applied any pending
+    // choice). The ini's language= key is only a pending change for the launcher, never read here.
+    const char* choices = std::getenv("PS4RT_LANGUAGE_CHOICES");
+    const char* language = std::getenv("PS4RT_LANGUAGE");
+    char* end = nullptr;
+    const long id = language && *language ? std::strtol(language, &end, 10) : -1;
+    v.language = choices && *choices && end && !*end && id >= 0 && id <= 30 ? int(id) : -1;
+    v.startup_language = v.language;
 }
 
 bool GraphicsNeedRestart() {
@@ -326,6 +334,9 @@ void Save() {
                  int(v.restart_unconfirmed.load()));
     std::fprintf(file, "anisotropy=%d\nvibration=%d\n", v.anisotropy.load(), v.vibration.load());
     std::fprintf(file, "spatial_aa=%d\n", int(v.spatial_aa.load()));
+    // Pending game language for ps4rt_launch.py (a PS4 system language ID); -1 keeps the
+    // console language the game already uses.
+    std::fprintf(file, "language=%d\n", v.language != v.startup_language ? v.language.load() : -1);
     // Read by run.sh at start.
     std::fprintf(file, "live_resolution=%s\n", v.live_resolution < 0 ? "auto"
                                                   : v.live_resolution ? "1" : "0");
