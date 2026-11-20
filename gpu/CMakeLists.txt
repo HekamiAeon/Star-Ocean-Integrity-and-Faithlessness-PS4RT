@@ -247,6 +247,10 @@ add_executable(graphics-settings-test EXCLUDE_FROM_ALL ../tests/test_graphics_se
 target_include_directories(graphics-settings-test PRIVATE shim)
 target_compile_options(graphics-settings-test PRIVATE -UNDEBUG)
 add_test(NAME graphics-settings COMMAND graphics-settings-test)
+add_executable(pipeline-binary-policy-test EXCLUDE_FROM_ALL ../tests/test_pipeline_binary_policy.cpp)
+target_include_directories(pipeline-binary-policy-test PRIVATE shadps4)
+target_compile_options(pipeline-binary-policy-test PRIVATE -UNDEBUG)
+add_test(NAME pipeline-binary-policy COMMAND pipeline-binary-policy-test)
 
 set_source_files_properties(../tests/test_display_sample_gpu.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
 
