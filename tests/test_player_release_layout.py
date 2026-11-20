@@ -23,6 +23,7 @@ class PlayerReleaseLayoutTests(unittest.TestCase):
             'docs/RUNNING_LINUX.md', 'docs/UPSTREAM_CREDITS.md',
             'docs/DISTRIBUTING_LINUX.md', 'src/runtime.c',
             'scripts/ps4rt_launch.py',
+            'scripts/trophy_catalog.py', 'scripts/trophy_crypto.py',
             'fsr4_shaders/LICENSE-FSR4-v07.txt',
             'gpu/assets/star_ocean_overlay.png',
             'gpu/third_party/imgui/LICENSE.txt',
@@ -41,6 +42,9 @@ class PlayerReleaseLayoutTests(unittest.TestCase):
         self.assertEqual(player['Play-Star-Ocean.sh'][1], 0o755)
         self.assertIn(b'Play-Game.sh', player['Play-Star-Ocean.sh'][0])
         self.assertIn('PLAYER_README.txt', player)
+        # Local achievements: the launcher builds the trophy catalog at start.
+        self.assertIn('scripts/trophy_catalog.py', player)
+        self.assertIn('scripts/trophy_crypto.py', player)
         self.assertIn('LICENSE', player)
         self.assertIn('CREDITS.md', player)
         self.assertIn('gpu/third_party/imgui/LICENSE.txt', player)
@@ -59,6 +63,15 @@ class PlayerReleaseLayoutTests(unittest.TestCase):
                 members = [m.name.partition('/')[2] for m in archive.getmembers()]
             self.assertTrue(all(not n.startswith(('docs/', 'source/'))
                                 for n in members), members)
+
+    def test_trophy_helpers_ship_without_player_state(self):
+        for name in ('scripts/trophy_catalog.py', 'scripts/trophy_crypto.py'):
+            self.assertIn(name, packager.REQUIRED_RELEASE_FILES)
+        # Trophy archives, catalogs and unlock state are never committed or packaged.
+        self.assertIn('achievements', packager.PRIVATE_COMPONENTS)
+        self.assertIn('npbind.dat', packager.PRIVATE_NAMES)
+        for suffix in ('.trp', '.esfm', '.sfm'):
+            self.assertIn(suffix, packager.PRIVATE_SUFFIXES)
 
     def test_source_requires_credits_and_license_but_not_the_readme(self):
         self.assertIn('LICENSE', packager.REQUIRED_RELEASE_FILES)

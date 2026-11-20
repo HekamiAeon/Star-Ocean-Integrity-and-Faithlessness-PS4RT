@@ -252,6 +252,21 @@ target_include_directories(pipeline-binary-policy-test PRIVATE shadps4)
 target_compile_options(pipeline-binary-policy-test PRIVATE -UNDEBUG)
 add_test(NAME pipeline-binary-policy COMMAND pipeline-binary-policy-test)
 
+# Local achievements (adapted from the Code Fairy port): the shared service and its
+# overlay navigation need no graphics device, guest process or original game files.
+add_executable(achievements-test EXCLUDE_FROM_ALL ../tests/test_achievements.cpp shim/ps4rt_achievements.cpp)
+target_include_directories(achievements-test PRIVATE shim)
+target_compile_options(achievements-test PRIVATE -UNDEBUG)
+add_test(NAME achievements COMMAND achievements-test)
+
+add_executable(achievements-ui-test EXCLUDE_FROM_ALL ../tests/test_achievements_ui.cpp
+    shim/ps4rt_achievements.cpp shim/ps4rt_achievements_ui.cpp
+    third_party/imgui/imgui.cpp third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp third_party/imgui/imgui_widgets.cpp)
+target_include_directories(achievements-ui-test PRIVATE shim third_party/imgui)
+target_compile_options(achievements-ui-test PRIVATE -UNDEBUG)
+add_test(NAME achievements-ui COMMAND achievements-ui-test)
+
 set_source_files_properties(../tests/test_display_sample_gpu.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
 
 set_source_files_properties(../tests/test_transition_snapshot_gpu.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")

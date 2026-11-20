@@ -14,6 +14,29 @@ from link_modules import link
 from content_profile import prepare as prepare_content
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _achievements(title_id: str, game: Path, user_dir: Path, env: dict) -> None:
+    """Prepare the local trophy catalog (adapted from the Code Fairy port).
+
+    The game still decides every unlock. Text, icons and unlock state live in
+    the runtime user area; the installed game files are only read. A missing
+    or damaged trophy archive must never prevent the game from starting.
+    """
+    from trophy_catalog import prepare_catalog, trophy_language
+    env.pop('PS4RT_TROPHY_CATALOG', None)
+    env['PS4RT_ACHIEVEMENTS_DIR'] = str(user_dir / 'achievements')
+    try:
+        language = int(env.get('PS4RT_LANGUAGE', '1'))
+        language = trophy_language(title_id, user_dir, language)
+        env['PS4RT_TROPHY_LANGUAGE'] = str(language)
+        catalog = prepare_catalog(game, user_dir, language)
+        if catalog is not None:
+            env['PS4RT_TROPHY_CATALOG'] = str(catalog)
+    except Exception as error:  # any metadata problem: play without achievements
+        print(f'Achievements unavailable: {error}', flush=True)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--game', type=Path,
@@ -82,6 +105,7 @@ def main(argv=None) -> int:
                PS4RT_PARTIAL_HEIGHT_VIEWS='0')
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
+    _achievements(title_id, game, user_dir, env)
     # Restart through the player launcher, preserving the selected game and options.
     # The raw runtime cannot reconstruct --game once Python execs it.
     restart = [sys.executable, str(Path(__file__).resolve()), '--game', str(game)]

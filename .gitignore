@@ -52,6 +52,14 @@ CLAUDE.md
 *.g1t
 *.g1m
 *.at9
+*.trp
+*.esfm
+*.sfm
+*.TRP
+*.ESFM
+*.SFM
+npbind.dat
+achievements/
 *.pfs
 *.iso
 *.bin

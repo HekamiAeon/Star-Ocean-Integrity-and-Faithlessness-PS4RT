@@ -34,14 +34,14 @@ PRIVATE_COMPONENTS = {
     ".git", ".agents", ".codex", ".ghidra", "__pycache__", "original",
     "references", "Reference", "analysis", "savedata", "savedata-backups",
     "saves", "user", "cache", "caches", "captures", "screenshots",
-    "frame-dump", "CMakeFiles",
+    "frame-dump", "CMakeFiles", "achievements",
 }
 PRIVATE_NAMES = {"AGENTS.md", "CLAUDE.md", "LAB_README.md",
-                 "PORTING_LOG.md", "AUTOMATED_PORTING.md"}
+                 "PORTING_LOG.md", "AUTOMATED_PORTING.md", "npbind.dat"}
 PRIVATE_SUFFIXES = {".pkg", ".prx", ".sprx", ".self", ".elf", ".sfo",
                     ".cpk", ".usm", ".g1t", ".g1m", ".at9", ".pfs",
                     ".iso", ".o", ".obj", ".a", ".so", ".dll",
-                    ".exe", ".log", ".cache"}
+                    ".exe", ".log", ".cache", ".trp", ".esfm", ".sfm"}
 PROHIBITED_PREFIXES = ("out/", "build/", "dist/", "templates/")
 
 
@@ -111,7 +111,8 @@ def committed_source():
 REQUIRED_RELEASE_FILES = {
     "LICENSE", "run.sh", "scripts/ps4rt_launch.py",
     "scripts/prepare.py", "scripts/link_modules.py", "scripts/link_libc.py",
-    "scripts/content_profile.py", "gpu/assets/star_ocean_overlay.png",
+    "scripts/content_profile.py", "scripts/trophy_catalog.py", "scripts/trophy_crypto.py",
+    "gpu/assets/star_ocean_overlay.png",
     "gpu/assets/sounds/navigate.wav", "gpu/assets/sounds/confirm.wav",
     "gpu/assets/sounds/cancel.wav", "docs/UPSTREAM_CREDITS.md",
     "packaging/fsr4-v07-assets.json",
