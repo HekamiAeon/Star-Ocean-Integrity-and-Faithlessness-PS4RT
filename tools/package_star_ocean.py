@@ -49,6 +49,17 @@ def git(*args):
     return subprocess.check_output(["git", "-C", str(ROOT), *args])
 
 
+def export_ignored(paths):
+    """The paths HEAD's .gitattributes marks export-ignore (the project docs), which
+    git archive HEAD leaves out."""
+    out = subprocess.run(["git", "-C", str(ROOT), "check-attr", "--source", "HEAD", "-z",
+                          "--stdin", "export-ignore"],
+                         input=b"".join(p.encode() + b"\0" for p in paths),
+                         capture_output=True, check=True).stdout
+    fields = out.split(b"\0")
+    return {fields[i].decode() for i in range(0, len(fields) - 2, 3) if fields[i + 2] == b"set"}
+
+
 def checksum(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -89,28 +100,30 @@ def committed_source():
             if not entry.isfile():
                 raise SystemExit("Non-regular committed file: " + entry.name)
             source[entry.name] = archive.extractfile(entry).read()
-    if not source or set(source) != set(modes):
+    # The archive holds every committed file except those .gitattributes leaves out.
+    if not source or set(source) != set(modes) - export_ignored(modes):
         raise SystemExit("Git tree and archive file lists differ.")
     return revision, source, modes
 
 
+# README.md is not required: .gitattributes keeps project docs out of source archives.
+# The credits and the license must be in every source archive.
+REQUIRED_RELEASE_FILES = {
+    "LICENSE", "run.sh", "scripts/ps4rt_launch.py",
+    "scripts/prepare.py", "scripts/link_modules.py", "scripts/link_libc.py",
+    "scripts/content_profile.py", "gpu/assets/star_ocean_overlay.png",
+    "gpu/assets/sounds/navigate.wav", "gpu/assets/sounds/confirm.wav",
+    "gpu/assets/sounds/cancel.wav", "docs/UPSTREAM_CREDITS.md",
+    "packaging/fsr4-v07-assets.json",
+    "packaging/linux/Containerfile.ffmpeg-png",
+    "packaging/linux/Play-Game.sh",
+    "packaging/linux/Play-Star-Ocean.sh",
+    "packaging/linux/PLAYER_README.txt",
+}
+
+
 def verify_release_files(source):
-    required = {
-        "README.md", "LICENSE", "run.sh", "scripts/ps4rt_launch.py",
-        "scripts/prepare.py", "scripts/link_modules.py", "scripts/link_libc.py",
-        "scripts/content_profile.py", "gpu/assets/star_ocean_overlay.png",
-        "gpu/assets/sounds/navigate.wav", "gpu/assets/sounds/confirm.wav",
-        "gpu/assets/sounds/cancel.wav", "docs/RUNNING_LINUX.md",
-        "docs/DISTRIBUTING_LINUX.md", "docs/UPSTREAM_CREDITS.md",
-        "docs/images/readme/sample.png",
-        "packaging/fsr4-v07-assets.json", "docs/LINUX_BINARY_RELEASE.md",
-        "packaging/linux/README.md",
-        "packaging/linux/Containerfile.ffmpeg-png",
-        "packaging/linux/Play-Game.sh",
-        "packaging/linux/Play-Star-Ocean.sh",
-        "packaging/linux/PLAYER_README.txt",
-    }
-    for name in sorted(required - set(source)):
+    for name in sorted(REQUIRED_RELEASE_FILES - set(source)):
         raise SystemExit("Missing required release file: " + name)
     lock = json.loads(source["packaging/fsr4-v07-assets.json"])
     expected = set(lock["files"])
@@ -202,8 +215,8 @@ def verify_bundle(bundle):
     return files
 
 
-# Required legal notices remain beside the portable runtime. The matching,
-# complete source archive (including docs/) is published separately.
+# Required legal notices remain beside the portable runtime. The matching
+# source archive is published separately (project docs stay out of both).
 PLAYER_LICENSE_FILES = {
     "gpu/shadps4/LICENSE",
     "gpu/third_party/fonts/LICENSE-DejaVu.txt",

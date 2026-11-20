@@ -4,3 +4,15 @@
 *.spv binary
 *.bin binary
 *.ttf binary
+
+# Project documentation (the root README, docs/ and the builder guide) names release versions
+# and download links, so source archives leave it out: GitHub's generated ZIP/TAR and the
+# package_star_ocean.py source export both read these rules, and the docs can change after a
+# release is built. Credits, license texts and third-party notices stay in every archive. The
+# licenses folder itself is unset too: an ignored directory hides everything below it.
+/README.md export-ignore
+/packaging/linux/README.md export-ignore
+/docs/** export-ignore
+/docs/UPSTREAM_CREDITS.md -export-ignore
+/docs/licenses -export-ignore
+/docs/licenses/** -export-ignore
