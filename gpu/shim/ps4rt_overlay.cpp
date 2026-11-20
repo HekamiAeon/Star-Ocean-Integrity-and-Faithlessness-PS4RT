@@ -382,6 +382,7 @@ void CompactGraphics() {
         ChoiceRow("Display mode", s.display_mode, Ps4RtGraphics::DisplayModeNames.data(),
                   nullptr, Ps4RtGraphics::DisplayModeCount,
                   "Windowed, borderless window or fullscreen. Applies immediately.");
+        CheckRow("FPS counter", s.show_fps, "Shows the frame rate in a corner of the screen. Applies live.");
         static const char* const providers[] = {"Off / Original", "FSR 3.1", "FSR 4 v07"};
         static constexpr int provider_values[] = {Ps4RtSettings::UpscalerOff,
             Ps4RtSettings::UpscalerFsr3, Ps4RtSettings::UpscalerFsr4};
@@ -431,7 +432,7 @@ void CompactGraphics() {
         ImGui::TextDisabled("Sync: occasional shader-loading stutters; fewer visual glitches.");
     }
     {
-        ImGui::TextDisabled("Display mode, resolution, FSR and sharpening apply live. Choices save on close.");
+        ImGui::TextDisabled("Display mode, resolution, FPS counter, FSR and sharpening apply live. Choices save on close.");
         if (s.anisotropy != s.startup_anisotropy)
             ImGui::TextWrapped("Restart the game to apply the selected anisotropic filtering.");
         else
