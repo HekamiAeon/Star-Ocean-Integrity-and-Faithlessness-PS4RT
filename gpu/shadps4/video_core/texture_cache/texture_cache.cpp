@@ -735,7 +735,16 @@ std::tuple<ImageId, int, int> TextureCache::ResolveOverlap(const ImageInfo& imag
         }
         if (!HaveCompatibleOverlapDimensions(image_info, cache_image.info)) {
             // Very likely this kind of overlap is caused by allocation from a pool.
-            if (safe_to_delete) {
+            // A recently used image is normally kept, but not a GPU-written one the guest
+            // has overwritten. Star Ocean rebuilds its environment cube at an offset inside
+            // the freed one; with the old cube still cached, faces of the new cube resolved
+            // to slices of it and the new cube kept faces that were never drawn (NaN
+            // lighting on characters, black squares after bloom).
+            const bool overwritten = IsOverwrittenPoolImage(
+                True(cache_image.flags & ImageFlagBits::GpuModified),
+                True(cache_image.flags & ImageFlagBits::CpuDirty),
+                cache_image.binding.is_bound || cache_image.binding.is_target);
+            if (safe_to_delete || overwritten) {
                 FreeImage(cache_image_id);
             }
             return {merged_image_id, -1, -1};

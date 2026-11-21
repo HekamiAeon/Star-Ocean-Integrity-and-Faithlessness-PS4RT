@@ -221,6 +221,11 @@ target_include_directories(image-subresource-test PRIVATE shim shadps4 third_par
 target_compile_options(image-subresource-test PRIVATE -UNDEBUG -fPIC)
 target_link_libraries(image-subresource-test PRIVATE ps4rtgpu)
 add_test(NAME image-subresource COMMAND image-subresource-test)
+add_executable(pool-reuse-test EXCLUDE_FROM_ALL ../tests/test_pool_reuse.cpp ../tests/test_gpu_runtime_stubs.cpp)
+target_include_directories(pool-reuse-test PRIVATE shim shadps4 third_party/gcn/include)
+target_compile_options(pool-reuse-test PRIVATE -UNDEBUG -fPIC)
+target_link_libraries(pool-reuse-test PRIVATE ps4rtgpu)
+add_test(NAME pool-reuse COMMAND pool-reuse-test)
 add_executable(gpu-workarounds-test EXCLUDE_FROM_ALL ../tests/test_gpu_workarounds.cpp ../tests/test_gpu_runtime_stubs.cpp)
 target_include_directories(gpu-workarounds-test PRIVATE shim shadps4 third_party/gcn/include)
 target_compile_options(gpu-workarounds-test PRIVATE -UNDEBUG -fPIC)
@@ -276,6 +281,8 @@ set_source_files_properties(../tests/test_cpu_image_writeback.cpp PROPERTIES COM
 set_source_files_properties(../tests/test_color_export.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
 
 set_source_files_properties(../tests/test_image_subresource.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
+
+set_source_files_properties(../tests/test_pool_reuse.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
 
 set_source_files_properties(../tests/test_gpu_workarounds.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
 

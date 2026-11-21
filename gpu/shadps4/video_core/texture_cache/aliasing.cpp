@@ -31,6 +31,10 @@ bool HaveCompatibleOverlapDimensions(const ImageInfo& lhs, const ImageInfo& rhs)
            (lhs.pixel_format != rhs.pixel_format || lhs.size.width == rhs.size.width);
 }
 
+bool IsOverwrittenPoolImage(bool gpu_modified, bool cpu_dirty, bool in_use) {
+    return gpu_modified && cpu_dirty && !in_use;
+}
+
 std::optional<u32> GetPaddedMipSlice(const ImageInfo& requested, const ImageInfo& parent,
                                    u32 mip) {
     if (requested.resources.levels != 1 || requested.resources.layers != 1 ||

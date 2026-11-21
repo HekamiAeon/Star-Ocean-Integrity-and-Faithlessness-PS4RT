@@ -19,6 +19,13 @@ struct ImageInfo;
 // neither normalized sampling extent nor the guest upload layout.
 [[nodiscard]] bool HaveCompatibleOverlapDimensions(const ImageInfo& lhs, const ImageInfo& rhs);
 
+// A GPU-written image whose guest memory the CPU has since overwritten holds
+// nothing the guest still expects: its next refresh uploads the new bytes over
+// it. Once the guest also describes a different image at that address, the old
+// one is freed at once, even if recently used, so that it cannot become the
+// parent of a render target placed inside its range.
+[[nodiscard]] bool IsOverwrittenPoolImage(bool gpu_modified, bool cpu_dirty, bool in_use);
+
 [[nodiscard]] std::optional<Extent3D> GetAliasCopyExtent(const ImageInfo& src,
                                                          const ImageInfo& dst);
 // A single 1D thin-tiled surface can describe extra trailing allocation rows
