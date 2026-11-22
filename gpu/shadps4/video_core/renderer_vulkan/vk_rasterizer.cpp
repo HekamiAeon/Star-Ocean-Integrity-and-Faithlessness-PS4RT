@@ -2755,16 +2755,6 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
                 continue;
             }
         }
-        const auto debug_native = [&](const VideoCore::Image& image) {
-            
-            std::printf("Scene native read: %s %016llx %s %ux%u needs_native %d written %d "
-                        "bindings %u mip_fallback %d\n",
-                        stage.sw_stage == Shader::SwStage::Compute ? "cs" : "gfx",
-                        (unsigned long long)stage.pgm_hash,
-                        vk::to_string(image.info.pixel_format).c_str(), image.info.size.width,
-                        image.info.size.height, int(image_desc.needs_native),
-                        int(image_desc.is_written), num_bindings, int(mip_fallback_mode));
-        };
         for (auto i = 0; i < num_bindings; i++) {
             // ps4rt: a plain binding (no mip override) of the same T# resolves to the same image
             // while no image was registered or unregistered.
@@ -2782,7 +2772,6 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
                     image_id = depth_image_id;
                     image = &texture_cache.GetImage(image_id);
                 }
-                debug_native(*image);
                 if (image->binding.is_bound) {
                     image->binding.force_general |= image_desc.is_written;
                 }
@@ -2820,7 +2809,6 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
                 image_id = depth_image_id;
                 image = &texture_cache.GetImage(image_id);
             }
-            debug_native(*image);
             if (image->binding.is_bound) {
                 // The image is already bound. In case if it is about to be used as storage we
                 // need to force general layout on it.
