@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Settings persistence and safe provider transitions, without game files or Vulkan.
+#include <array>
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
 #include <unistd.h>
+#include "ps4rt_graphics.h"
 #include "ps4rt_settings.h"
 
 int main() {
@@ -16,7 +20,7 @@ int main() {
     setenv("PS4RT_CONFIG", path, 1);
     for (const char* key : {"PS4RT_UPSCALER", "PS4RT_OUTPUT_RES", "PS4RT_RCAS",
                             "PS4RT_OBJECT_MOTION", "PS4RT_JITTER",
-                            "PS4RT_ASYNC_SHADERS"}) unsetenv(key);
+                            "PS4RT_ASYNC_SHADERS", "PS4RT_SO_RESOLUTION"}) unsetenv(key);
     auto& s = Get();
     Load();
     assert(s.native_scene && s.CompactGraphicsMenu());
@@ -100,6 +104,93 @@ int main() {
     }
     unsetenv("PS4RT_LANGUAGE");
     unsetenv("PS4RT_LANGUAGE_CHOICES");
+
+    // Internal resolution: the Code Fairy port's list, keys, menu order and aspect groups.
+    namespace G = Ps4RtGraphics;
+    assert(G::Resolutions.size() == 10 && G::Resolutions[0] == "native");
+    assert(G::ParseResolution("3440x1440") == 6 && G::ParseResolution("720p") == 1 && G::ParseResolution("540p") == 2);
+    assert(G::ParseResolution("") == 0 && G::ParseResolution("4K") == 0 && G::ParseResolution("1280x720") == 0);
+    assert(G::ResolutionWidths[0] == 1920 && G::ResolutionHeights[0] == 1080);
+    assert(G::ResolutionWidths[2] == 1024 && G::ResolutionHeights[2] == 576); // "540p"
+    {
+        // Every resolution is in the menu once, under the heading of its aspect, with its size
+        // as the label; within a group the sizes grow.
+        std::array<bool, 10> listed{};
+        int next = 0;
+        for (const auto& group : G::ResolutionMenuGroups) {
+            assert(group.first == next && group.count > 0);
+            int aw = 0, ah = 0;
+            assert(std::sscanf(group.label, "%d:%d", &aw, &ah) == 2);
+            for (int i = group.first; i < group.first + group.count; ++i) {
+                const int r = G::ResolutionMenuOrder[i];
+                assert(r >= 0 && r < 10 && !listed[r]);
+                listed[r] = true;
+                const int w = G::ResolutionWidths[r], h = G::ResolutionHeights[r];
+                assert(std::abs(double(w) / h - double(aw) / ah) < 0.06);
+                char label[32];
+                std::snprintf(label, sizeof(label), "%d x %d", w, h);
+                assert(!std::strncmp(G::ResolutionMenuLabels[i], label, std::strlen(label)));
+                if (i > group.first)
+                    assert(w * h > G::ResolutionWidths[G::ResolutionMenuOrder[i - 1]] *
+                                       G::ResolutionHeights[G::ResolutionMenuOrder[i - 1]]);
+                assert(G::ResolutionOfSize(w, h, -1) == r);
+                assert(r == 0 ? !G::InternalSize(w, h) : G::InternalSize(w, h));
+            }
+            next += group.count;
+        }
+        assert(next == 10);
+    }
+    assert(G::ResolutionOfSize(1600, 900, 4) == 4 && G::ResolutionOfSize(0, 0, -1) == -1);
+    assert(G::InternalSize(1600, 900) && G::InternalSize(2880, 1200));
+    assert(!G::InternalSize(1920, 1080) && !G::InternalSize(1440, 1080) && !G::InternalSize(1920, 1200));
+    assert(!G::InternalSize(640, 350) && !G::InternalSize(0, 0) && !G::InternalSize(-3440, -1440));
+    assert(!G::InternalSize(20000, 1080));
+    assert(G::WideImage(2560, 1080) && G::WideImage(3440, 1440) && G::WideImage(5120, 1440));
+    assert(!G::WideImage(1920, 1080) && !G::WideImage(2560, 1440) && !G::WideImage(3840, 2160));
+    assert(!G::WideImage(1440, 1080) && !G::WideImage(0, 0) && !G::WideImage(-3440, -1440));
+    // A 1920x1080 launch: the menu's choice is only the selection for the next start.
+    Load();
+    assert(s.internal_width == 0 && s.internal_height == 0 && s.render_resolution == 0 && !GraphicsNeedRestart());
+    SetSceneUpscaler(UpscalerFsr3, false);
+    s.render_resolution = 6;
+    assert(GraphicsNeedRestart());
+    Save();
+    // The launcher passes the saved choice as a size. The launch runs at that size with the
+    // upscaler held off, and the saved upscaler choice survives a save made during it. That
+    // holds for an ultrawide size and for a 16:9 one, smaller or larger than 1080p.
+    const struct { const char* size; int width, height, choice; } launches[] = {
+        {"3440x1440", 3440, 1440, 6}, {"1280x720", 1280, 720, 1}, {"1024x576", 1024, 576, 2},
+        {"3840x2160", 3840, 2160, 4}};
+    for (const auto& launch : launches) {
+        s.render_resolution = launch.choice;
+        Save();
+        setenv("PS4RT_SO_RESOLUTION", launch.size, 1);
+        Load();
+        assert(s.internal_width == launch.width && s.internal_height == launch.height);
+        assert(s.render_resolution == launch.choice && s.startup_render_resolution == launch.choice);
+        assert(!GraphicsNeedRestart());
+        assert(s.upscaler == UpscalerOff && s.kept_upscaler == UpscalerFsr3 && !s.jitter);
+        s.render_resolution = 0;
+        assert(GraphicsNeedRestart());
+        Save();
+        unsetenv("PS4RT_SO_RESOLUTION");
+        Load();
+        assert(s.internal_width == 0 && s.render_resolution == 0 && s.upscaler == UpscalerFsr3 && s.jitter);
+    }
+    // A size from the caller that is not in the list runs too; the saved choice stays as it is.
+    setenv("PS4RT_SO_RESOLUTION", "2880x1200", 1);
+    Load();
+    assert(s.internal_width == 2880 && s.internal_height == 1200 && s.render_resolution == 0);
+    assert(s.upscaler == UpscalerOff && s.kept_upscaler == UpscalerFsr3);
+    // The game's own size, a size narrower than 16:9, malformed text or an empty value is an
+    // ordinary launch.
+    for (const char* text : {"1920x1080", "1440x1080", "3440", "3440x1440x", "wide", ""}) {
+        setenv("PS4RT_SO_RESOLUTION", text, 1);
+        Load();
+        assert(s.internal_width == 0 && s.internal_height == 0 && s.upscaler == UpscalerFsr3);
+    }
+    unsetenv("PS4RT_SO_RESOLUTION");
     unlink(path);
-    std::puts("PASS: native-scene settings persistence, native-port defaults and the pending game-language protocol");
+    std::puts("PASS: native-scene settings persistence, native-port defaults, the pending game-language protocol "
+              "and the internal resolution option");
 }

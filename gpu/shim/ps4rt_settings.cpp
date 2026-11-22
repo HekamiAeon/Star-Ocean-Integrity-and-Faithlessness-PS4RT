@@ -194,6 +194,21 @@ void Load() {
         SetSceneUpscaler(v.upscaler, false);
         v.temporal_problem = "FSR is waiting for a 3D scene; original rendering is active.";
     }
+    // The internal resolution of this launch, when it is not the game's own. The menu shows it
+    // as the current choice, and the upscaler stays off for the launch (see internal_width).
+    v.internal_width = v.internal_height = 0;
+    v.kept_upscaler = v.upscaler;
+    if (const char* size = std::getenv("PS4RT_SO_RESOLUTION")) {
+        unsigned w = 0, h = 0;
+        char tail = 0;
+        if (std::sscanf(size, "%ux%u%c", &w, &h, &tail) == 2 && w <= 16384 && h <= 16384 &&
+            Ps4RtGraphics::InternalSize(int(w), int(h))) {
+            v.internal_width = int(w);
+            v.internal_height = int(h);
+            v.render_resolution = Ps4RtGraphics::ResolutionOfSize(int(w), int(h), v.render_resolution);
+            SetSceneUpscaler(UpscalerOff, false);
+        }
+    }
     v.startup_preset = v.preset;
     v.startup_upscaler = v.upscaler;
     v.startup_object_motion = v.object_motion;
@@ -306,7 +321,8 @@ void Save() {
                  "upscaler=%s\npreset=%d\nsharpen=%d\nsharpness=%.2f\njitter=%d\n"
                  "reactive=%d\nobject_motion=%d\nreactive_scale=%.2f\nreactive_threshold=%.2f\nreactive_max=%.2f\n"
                  "debug_view=%d\nshow_fps=%d\nfsr4_auto_exposure=%d\nfsr4_invert_jitter=%d\n",
-                 UpscalerName(v.upscaler), v.preset.load(), int(v.sharpen.load()),
+                 UpscalerName(v.internal_width ? v.kept_upscaler : v.upscaler.load()), v.preset.load(),
+                 int(v.sharpen.load()),
                  v.sharpness.load(), int(v.jitter.load()), int(v.reactive.load()),
                  int(v.object_motion.load()),
                  v.reactive_scale.load(), v.reactive_threshold.load(), v.reactive_max.load(),
@@ -329,7 +345,8 @@ void Save() {
                  Ps4RtGraphics::DisplayModeKeys[std::clamp(v.display_mode.load(), 0, 2)].data(),
                  int(v.vsync.load()), v.fps_limit.load(), int(v.async_shaders.load()),
                  int(v.fsr1.load()), int(v.rcas.load()), v.rcas_strength.load(), v.frames_queued.load(),
-                 Ps4RtGraphics::Resolutions[std::clamp(v.render_resolution.load(), 0, 5)].data(),
+                 Ps4RtGraphics::Resolutions[std::clamp(v.render_resolution.load(), 0,
+                                                       int(Ps4RtGraphics::Resolutions.size()) - 1)].data(),
                  v.engine_fps.load(), int(v.deferred_readback.load()), int(v.stale_readback.load()),
                  int(v.restart_unconfirmed.load()));
     std::fprintf(file, "anisotropy=%d\nvibration=%d\n", v.anisotropy.load(), v.vibration.load());

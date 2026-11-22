@@ -69,6 +69,12 @@ struct Values {
     std::atomic<int> vibration{100};
     // Startup: run.py turns them into patches and environment variables; "Apply and restart".
     std::atomic<int> render_resolution{0};
+    /// The internal resolution this launch runs at (PS4RT_SO_RESOLUTION, applied by
+    /// src/runtime_resolution.c); 0 at the game's own 1920x1080. The FSR scene path is built for
+    /// the 1080p scene, so the upscaler is held off at every other size: kept_upscaler is the
+    /// saved choice, which Save() writes back for the next 1920x1080 launch.
+    int internal_width = 0, internal_height = 0;
+    int kept_upscaler = UpscalerOff;
     std::atomic<int> engine_fps{120};
     std::atomic<bool> deferred_readback{true};
     std::atomic<bool> stale_readback{true};

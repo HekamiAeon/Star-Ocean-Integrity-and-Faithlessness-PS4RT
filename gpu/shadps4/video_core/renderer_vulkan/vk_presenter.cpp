@@ -865,6 +865,16 @@ Frame* Presenter::GetRenderFrame() {
 void Presenter::SetExpectedGameSize(s32 width, s32 height) {
     const auto& graphics = Ps4RtSettings::Get();
     if (graphics.CompactGraphicsMenu()) {
+        // At another internal resolution the upscaler is off and the game's image is shown at
+        // its own size; the window fits it. The output list is for the 1080p scene, and holds
+        // 16:9 sizes only: it would squeeze an image wider than 16:9.
+        if (const int image_width = graphics.image_width, image_height = graphics.image_height;
+            image_width > 0 && image_height > 0 &&
+            (graphics.internal_width != 0 || Ps4RtGraphics::WideImage(image_width, image_height))) {
+            expected_frame_width = image_width;
+            expected_frame_height = image_height;
+            return;
+        }
         const int output = std::clamp(graphics.output_res.load(),0,Ps4RtSettings::OutputCount-1);
         expected_frame_width = Ps4RtSettings::OutputWidths[output];
         expected_frame_height = Ps4RtSettings::OutputHeights[output];

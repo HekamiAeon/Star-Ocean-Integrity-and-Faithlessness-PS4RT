@@ -208,6 +208,27 @@ void Choice(const char* label, std::atomic<int>& target, const char* const* labe
     }
 }
 
+// Internal resolution: one list grouped under aspect headings (16:9, 21:9, 24:9, 32:9), as in
+// the Code Fairy port.
+void ResolutionChoice(const char* label, std::atomic<int>& target) {
+    namespace G = Ps4RtGraphics;
+    const int value = target.load();
+    const int current = G::IndexOf(G::ResolutionMenuOrder, value, 2);
+    if (!ImGui::BeginCombo(label, G::ResolutionMenuLabels[current], ImGuiComboFlags_HeightLarge))
+        return;
+    for (const auto& group : G::ResolutionMenuGroups) {
+        // Headings are decorative: keyboard and controller navigation visits only resolutions.
+        ImGui::SeparatorText(group.label);
+        for (int i = group.first; i < group.first + group.count; ++i) {
+            const bool selected = G::ResolutionMenuOrder[i] == value;
+            if (ImGui::Selectable(G::ResolutionMenuLabels[i], selected))
+                Store(target, G::ResolutionMenuOrder[i], true);
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+    }
+    ImGui::EndCombo();
+}
+
 // Controller button names in the help text follow PS4RT_GLYPHS (run.py sets xbox or nintendo when
 // the glyph feature is on); unset is PlayStation. Read once: the environment is fixed for a run.
 static const char* PadText(const char* playstation, const char* xbox, const char* nintendo) {
@@ -367,18 +388,33 @@ void GameTab() {
 }
 
 void CompactGraphics() {
+    namespace G = Ps4RtGraphics;
     auto& s = Ps4RtSettings::Get();
+    // At another internal resolution the game renders the whole picture itself at that size: the
+    // output list and the FSR scene path (both built for the 1080p scene) do not apply.
+    const bool custom = s.internal_width != 0;
     if (BeginRows("##scene_image")) {
-        static const char* const outputs[] = {"1920 x 1080", "2560 x 1440", "3840 x 2160 (4K)"};
-        static constexpr int output_values[] = {1, 2, 3};
-        Row("Output resolution");
+        Row("Internal resolution");
         if (focus_graphics) {
             ImGui::SetKeyboardFocusHere();
             focus_graphics = false;
         }
-        Choice("##value",s.output_res,outputs,output_values,3);
-        Help("Fixed 16:9 output fitted to the window. The game still renders internally at 1080p.");
+        ResolutionChoice("##value", s.render_resolution);
+        Help("Restart required. Ultrawide resolutions are experimental: occasional flicker or misplaced UI "
+             "elements may occur. Report major issues on the official GitHub, or switch back to 16:9.");
         ImGui::PopID();
+        static const char* const outputs[] = {"1920 x 1080", "2560 x 1440", "3840 x 2160 (4K)"};
+        static constexpr int output_values[] = {1, 2, 3};
+        if (custom) {
+            char text[64];
+            std::snprintf(text, sizeof(text), "%d x %d (internal resolution)", s.internal_width, s.internal_height);
+            InfoRow("Output resolution", text);
+        } else {
+            Row("Output resolution");
+            Choice("##value",s.output_res,outputs,output_values,3);
+            Help("Fixed 16:9 output fitted to the window. The game still renders internally at 1080p.");
+            ImGui::PopID();
+        }
         ChoiceRow("Display mode", s.display_mode, Ps4RtGraphics::DisplayModeNames.data(),
                   nullptr, Ps4RtGraphics::DisplayModeCount,
                   "Windowed, borderless window or fullscreen. Applies immediately.");
@@ -388,14 +424,19 @@ void CompactGraphics() {
             Ps4RtSettings::UpscalerFsr3, Ps4RtSettings::UpscalerFsr4};
         // Commit the provider together with its required motion/jitter settings.
         std::atomic<int> provider{s.upscaler.load()};
-        ChoiceRow("Upscaling / anti-aliasing", provider, providers, provider_values,
-                  s.fsr4_supported ? 3 : 2,
-                  "FSR reconstructs the 1080p scene before the HUD. Off uses the original image with ordinary display scaling.");
-        if (provider != s.upscaler)
-            Ps4RtSettings::SetSceneUpscaler(provider, false);
+        if (custom) {
+            InfoRow("Upscaling / anti-aliasing", "Off (available at 1920 x 1080 only)");
+        } else {
+            ChoiceRow("Upscaling / anti-aliasing", provider, providers, provider_values,
+                      s.fsr4_supported ? 3 : 2,
+                      "FSR reconstructs the 1080p scene before the HUD. Off uses the original image with ordinary display scaling.");
+            if (provider != s.upscaler)
+                Ps4RtSettings::SetSceneUpscaler(provider, false);
+        }
         const bool temporal = s.upscaler != Ps4RtSettings::UpscalerOff;
         const int output = s.output_res;
-        InfoRow("Quality preset", !temporal || s.temporal_problem ? "Original (1080p input)" :
+        InfoRow("Quality preset", custom ? "Original (internal resolution)" :
+            !temporal || s.temporal_problem ? "Original (1080p input)" :
             output == 1 ? "Native AA (1080p input)" :
             output == 3 ? "Performance (1080p input)" : "Custom 1.33x (1080p input)");
         static const char* const anisotropy_labels[] = {"Game default", "2x", "4x", "8x", "16x"};
@@ -432,12 +473,25 @@ void CompactGraphics() {
         ImGui::TextDisabled("Sync: occasional shader-loading stutters; fewer visual glitches.");
     }
     {
-        ImGui::TextDisabled("Display mode, resolution, FPS counter, FSR and sharpening apply live. Choices save on close.");
-        if (s.anisotropy != s.startup_anisotropy)
-            ImGui::TextWrapped("Restart the game to apply the selected anisotropic filtering.");
+        ImGui::TextDisabled("Display mode, output resolution, FPS counter, FSR and sharpening apply live. Choices save on close.");
+        const bool resolution_changed = s.render_resolution != s.startup_render_resolution;
+        const bool anisotropy_changed = s.anisotropy != s.startup_anisotropy;
+        if (resolution_changed || anisotropy_changed)
+            ImGui::TextWrapped("Restart the game to apply the selected %s.",
+                               !anisotropy_changed ? "internal resolution" :
+                               !resolution_changed ? "anisotropic filtering" :
+                               "internal resolution and anisotropic filtering");
         else
-            ImGui::TextDisabled("Anisotropic filtering changes require a game restart.");
-        ImGui::TextDisabled("Render scale follows the fixed 1080p game input.");
+            ImGui::TextDisabled("Internal resolution and anisotropic filtering changes require a game restart.");
+        // The game image the presenter last showed tells whether the size took effect: the
+        // runtime leaves a game build it does not recognise at 1920x1080.
+        if (custom && s.image_width == 1920 && s.image_height == 1080)
+            ImGui::TextWrapped("The selected internal resolution could not be applied to this game "
+                               "version; the game is running at 1920 x 1080.");
+        else if (custom)
+            ImGui::TextDisabled("The game renders at the selected internal resolution; FSR is available at 1920 x 1080 only.");
+        else
+            ImGui::TextDisabled("Render scale follows the fixed 1080p game input.");
         if (s.upscaler != Ps4RtSettings::UpscalerOff)
             if (const char* problem = s.temporal_problem.load()) ImGui::TextWrapped("%s", problem);
         if (!s.fsr4_supported) ImGui::TextWrapped("FSR 4 v07 requires GPU features unavailable on this device. FSR 3.1 remains available.");
@@ -518,9 +572,10 @@ void PerformanceTab() {
     }
     ImGui::SeparatorText("Applied on restart");
     if (BeginRows("##restart")) {
-        static const char* const resolution_labels[] = {"Native (1080p)", "480p", "720p", "1440p", "1800p", "4K"};
-        ChoiceRow("Render resolution", s.render_resolution, resolution_labels, nullptr, int(G::Resolutions.size()),
-                  "The resolution the game draws at. Higher is sharper and slower.");
+        Row("Internal resolution");
+        ResolutionChoice("##value", s.render_resolution);
+        Help("The resolution the game renders at; requires a restart.");
+        ImGui::PopID();
         static const char* const engine_labels[] = {"60 (original)", "120", "240"};
         ChoiceRow("Engine frame rate", s.engine_fps, engine_labels, G::EngineFps.data(), int(G::EngineFps.size()),
                   "The highest frame rate the game itself runs at.");
@@ -650,7 +705,7 @@ void Menu() {
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     // Room for 16:9 artwork while keeping gameplay visible around the window.
     const float target_width = (s.CompactGraphicsMenu() ? 1080.0f : 1120.0f) * base_scale;
-    const float target_height = (s.CompactGraphicsMenu() ? 650.0f : 760.0f) * base_scale;
+    const float target_height = (s.CompactGraphicsMenu() ? 690.0f : 760.0f) * base_scale;
     ImGui::SetNextWindowSize(ImVec2(std::min(target_width, viewport->WorkSize.x * 0.88f),
                                    std::min(target_height, viewport->WorkSize.y * 0.82f)),
                              ImGuiCond_Appearing);

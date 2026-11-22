@@ -3,9 +3,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <bit>
+#include <cstring>
+#include <optional>
+#include <vector>
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
 #include "video_core/renderer_vulkan/ps4rt_camera.h"
+#include "video_core/renderer_vulkan/star_ocean_fill.h"
+#include "video_core/renderer_vulkan/star_ocean_movie.h"
 #include "ps4rt_toggles.h"
 #include "ps4rt_gpu_workarounds.h"
 #include "ps4rt_settings.h"
@@ -911,6 +916,247 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
 
 
 
+// Wide screens (star_ocean_movie.h): a full-screen recorded movie, a clip-space quad sampling
+// planar 4:2:0 video over the whole viewport, and where it goes on a wider target.
+static std::optional<Vulkan::StarOceanMovie::Layout> MovieLayout(
+    const Vulkan::GraphicsPipeline* pipeline, const AmdGpu::Regs& regs, Core::MemoryManager& memory,
+    u32 target_width, std::array<float, 2> target_scale) {
+    using namespace Vulkan::StarOceanMovie;
+    if (regs.IsClipDisabled() || regs.num_indices != 4 || regs.num_instances.NumInstances() != 1)
+        return {};
+    const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+    const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+    const auto& fetch = pipeline->GetFetchShader();
+    if (!ps || !fetch || ps->images.size() != 3) return {};
+    std::array<Plane, 3> planes;
+    for (size_t i = 0; i < planes.size(); ++i) {
+        const auto t = ps->images[i].GetSharp(*ps);
+        planes[i] = {u32(t.width) + 1, u32(t.height) + 1, u32(t.data_format)};
+    }
+    const auto video = PlanarVideo(planes);
+    if (!video) return {};
+    const auto [first_vertex, first_instance] = GetDrawOffsets(regs, vs, fetch);
+    if (first_vertex || first_instance) return {};
+    bool quad = false;
+    for (const auto& attribute : fetch->attributes) {
+        if (attribute.semantic != 0) continue;
+        const auto buffer = attribute.GetSharp(vs);
+        const u64 stride = buffer.GetStride();
+        const u64 bytes = stride * 4;
+        if (!buffer.Valid() || stride < 8 || buffer.GetSize() < bytes ||
+            buffer.GetNumberFmt() != AmdGpu::NumberFormat::Float ||
+            !memory.IsValidGpuMapping(buffer.base_address, 0) ||
+            memory.ClampRangeSize(buffer.base_address, bytes) != bytes) return {};
+        std::array<std::array<float, 2>, 4> points;
+        for (size_t i = 0; i < points.size(); ++i)
+            std::memcpy(points[i].data(), reinterpret_cast<const void*>(buffer.base_address + i * stride), 8);
+        quad = FullscreenQuad(points);
+        break;
+    }
+    if (!quad) return {};
+    const auto& vp = regs.viewports[0];
+    return Fit({(vp.xoffset - vp.xscale) * target_scale[0], (vp.yoffset - vp.yscale) * target_scale[1],
+                vp.xscale * 2 * target_scale[0], vp.yscale * 2 * target_scale[1]},
+               target_width, *video);
+}
+
+// Wide screens (star_ocean_fill.h): a four-vertex draw through one of the game's two 2D
+// transforms, into a viewport wider than 16:9, with float positions the renderer can read.
+struct Quad2D {
+    Vulkan::StarOceanFill::Space space{};
+    float width{}, height{}; ///< viewport, guest pixels
+    VAddr address{};         ///< position stream
+    u64 stride{}, size{};
+    std::array<Vulkan::StarOceanFill::Point, 4> points{};
+};
+
+// Which of the game's 2D transforms the draw's first vertex-shader constants hold, for a
+// viewport of the given size (star_ocean_fill.h Classify).
+static Vulkan::StarOceanFill::Space DrawSpace(const Vulkan::GraphicsPipeline* pipeline,
+                                              Core::MemoryManager& memory, float width,
+                                              float height) {
+    const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+    for (const auto& resource : vs.buffers) {
+        if (resource.IsSpecial()) continue;
+        const auto buffer = resource.GetSharp(vs);
+        std::array<float, 8> constants;
+        if (!buffer.Valid() || buffer.GetSize() < sizeof(constants) || !buffer.base_address ||
+            !memory.IsValidGpuMapping(buffer.base_address, 0) ||
+            memory.ClampRangeSize(buffer.base_address, sizeof(constants)) != sizeof(constants))
+            continue;
+        std::memcpy(constants.data(), reinterpret_cast<const void*>(buffer.base_address),
+                    sizeof(constants));
+        return Vulkan::StarOceanFill::Classify(constants, width, height);
+    }
+    return Vulkan::StarOceanFill::Space::None;
+}
+
+// The 2D transform and viewport of such a draw, with any vertex count (no points read).
+static std::optional<Quad2D> ReadView2D(const Vulkan::GraphicsPipeline* pipeline,
+                                        const AmdGpu::Regs& regs, Core::MemoryManager& memory) {
+    using namespace Vulkan::StarOceanFill;
+    const auto& fetch = pipeline->GetFetchShader();
+    if (!fetch || regs.IsClipDisabled() || regs.num_instances.NumInstances() != 1) return {};
+    const auto& vp = regs.viewports[0];
+    Quad2D quad;
+    quad.width = vp.xscale * 2;
+    quad.height = std::abs(vp.yscale) * 2;
+    // 16:9 (or narrower) is never touched; the viewport starts at the target's left edge.
+    if (!(quad.height > 0) || quad.width * canvas_height <= quad.height * canvas_width * 1.0005f ||
+        std::abs(vp.xoffset - vp.xscale) > 0.01f) return {};
+    const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+    if (const auto [first_vertex, first_instance] = GetDrawOffsets(regs, vs, fetch);
+        first_vertex || first_instance) return {};
+    quad.space = DrawSpace(pipeline, memory, quad.width, quad.height);
+    if (quad.space == Space::None) return {};
+    return quad;
+}
+
+static std::optional<Quad2D> ReadQuad2D(const Vulkan::GraphicsPipeline* pipeline,
+                                        const AmdGpu::Regs& regs, Core::MemoryManager& memory) {
+    if (regs.num_indices != 4) return {};
+    auto quad = ReadView2D(pipeline, regs, memory);
+    if (!quad) return {};
+    const auto readable = [&](VAddr address, u64 bytes) {
+        return address && memory.IsValidGpuMapping(address, 0) &&
+               memory.ClampRangeSize(address, bytes) == bytes;
+    };
+    const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+    for (const auto& attribute : pipeline->GetFetchShader()->attributes) {
+        if (attribute.semantic != 0) continue;
+        const auto buffer = attribute.GetSharp(vs);
+        quad->stride = buffer.GetStride();
+        quad->size = std::max<u64>(buffer.GetSize(), quad->stride * 4);
+        if (!buffer.Valid() || quad->stride < 8 || buffer.GetNumberFmt() != AmdGpu::NumberFormat::Float ||
+            !readable(buffer.base_address, quad->stride * 4)) return {};
+        quad->address = buffer.base_address;
+        for (size_t i = 0; i < quad->points.size(); ++i)
+            std::memcpy(quad->points[i].data(),
+                        reinterpret_cast<const void*>(quad->address + i * quad->stride), 8);
+        return quad;
+    }
+    return {};
+}
+
+// The texture region and vertex alpha of a picture read by ReadQuad2D: the first float stream
+// with two or more components after the position holds texture coordinates, an 8-bit
+// four-component stream the colour (alpha in its fourth byte). Nothing without texture
+// coordinates; no colour stream counts as opaque.
+struct PictureVertices {
+    std::array<float, 4> region{}; ///< left, top, right, bottom
+    bool see_through{};
+};
+
+static std::optional<PictureVertices> ReadPictureVertices(const Vulkan::GraphicsPipeline* pipeline,
+                                                          Core::MemoryManager& memory) {
+    const auto& fetch = pipeline->GetFetchShader();
+    if (!fetch) return {};
+    const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+    PictureVertices out;
+    bool region = false;
+    for (const auto& attribute : fetch->attributes) {
+        if (attribute.semantic == 0) continue;
+        const auto buffer = attribute.GetSharp(vs);
+        const u64 stride = buffer.GetStride();
+        if (!buffer.Valid() || stride < 4 || !buffer.base_address ||
+            !memory.IsValidGpuMapping(buffer.base_address, 0) ||
+            memory.ClampRangeSize(buffer.base_address, stride * 4) != stride * 4) continue;
+        const auto vertex = [&](u32 i) {
+            return reinterpret_cast<const u8*>(buffer.base_address + i * stride);
+        };
+        if (buffer.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
+            buffer.GetNumberFmt() == AmdGpu::NumberFormat::Unorm) {
+            for (u32 i = 0; i < 4; ++i) out.see_through |= vertex(i)[3] < 0xff;
+        } else if (!region && buffer.GetNumberFmt() == AmdGpu::NumberFormat::Float &&
+                   attribute.num_elements >= 2 && stride >= 8) {
+            for (u32 i = 0; i < 4; ++i) {
+                std::array<float, 2> t;
+                std::memcpy(t.data(), vertex(i), sizeof(t));
+                if (!std::isfinite(t[0]) || !std::isfinite(t[1])) return {};
+                out.region = i ? std::array<float, 4>{std::min(out.region[0], t[0]),
+                                                      std::min(out.region[1], t[1]),
+                                                      std::max(out.region[2], t[0]),
+                                                      std::max(out.region[3], t[1])}
+                               : std::array<float, 4>{t[0], t[1], t[0], t[1]};
+            }
+            region = true;
+        }
+    }
+    if (!region) return {};
+    return out;
+}
+
+// The first 1024 vertices of a 2D quad- or triangle-list draw, in draw order (through its
+// index buffer): positions, and texture coordinates times the first texture's size (the
+// streams ReadPictureVertices reads). Nothing when they cannot be read.
+struct DrawVertices {
+    std::vector<Vulkan::StarOceanFill::Point> positions, texels;
+    size_t corners{}; ///< vertices per primitive
+};
+
+static std::optional<DrawVertices> ReadDrawVertices(const Vulkan::GraphicsPipeline* pipeline,
+                                                    const AmdGpu::Regs& regs,
+                                                    Core::MemoryManager& memory, bool is_indexed,
+                                                    u32 index_offset, float width, float height) {
+    DrawVertices out;
+    out.corners = regs.primitive_type == AmdGpu::PrimitiveType::QuadList       ? 4
+                  : regs.primitive_type == AmdGpu::PrimitiveType::TriangleList ? 3
+                                                                               : 0;
+    const auto& fetch = pipeline->GetFetchShader();
+    if (!out.corners || !fetch || !(width > 0) || !(height > 0)) return {};
+    const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+    if (const auto [first_vertex, first_instance] = GetDrawOffsets(regs, vs, fetch);
+        first_vertex || first_instance) return {};
+    const u32 count = u32(std::min<u64>(regs.num_indices, 1024) / out.corners * out.corners);
+    if (!count) return {};
+    const auto readable = [&](VAddr address, u64 bytes) {
+        return address && memory.IsValidGpuMapping(address, 0) &&
+               memory.ClampRangeSize(address, bytes) == bytes;
+    };
+    std::vector<u32> order(count);
+    if (is_indexed) {
+        const bool wide = regs.index_buffer_type.index_type != AmdGpu::IndexType::Index16;
+        const u64 size = wide ? 4 : 2;
+        const VAddr address = regs.index_base_address.Address<VAddr>() + u64(index_offset) * size;
+        if (!readable(address, count * size)) return {};
+        for (u32 i = 0; i < count; ++i) {
+            if (wide) {
+                std::memcpy(&order[i], reinterpret_cast<const void*>(address + i * size), 4);
+            } else {
+                u16 index;
+                std::memcpy(&index, reinterpret_cast<const void*>(address + i * size), 2);
+                order[i] = index;
+            }
+        }
+    } else {
+        for (u32 i = 0; i < count; ++i) order[i] = i;
+    }
+    const u64 last = *std::max_element(order.begin(), order.end());
+    for (const bool position : {true, false}) {
+        for (const auto& attribute : fetch->attributes) {
+            if ((attribute.semantic == 0) != position) continue;
+            const auto buffer = attribute.GetSharp(vs);
+            const u64 stride = buffer.GetStride();
+            if (!buffer.Valid() || buffer.GetNumberFmt() != AmdGpu::NumberFormat::Float ||
+                attribute.num_elements < 2 || stride < 8 ||
+                !readable(buffer.base_address, stride * last + 8)) {
+                if (position) return {};
+                continue;
+            }
+            auto& points = position ? out.positions : out.texels;
+            points.resize(count);
+            for (u32 i = 0; i < count; ++i)
+                std::memcpy(points[i].data(),
+                            reinterpret_cast<const void*>(buffer.base_address + order[i] * stride), 8);
+            if (!position)
+                for (auto& t : points) t = {t[0] * width, t[1] * height};
+            break;
+        }
+    }
+    if (out.positions.empty() || out.texels.empty()) return {};
+    return out;
+}
+
 void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw* used_prepared,
                             bool is_indexed, u32 index_offset) {
     if (DrawPipe::OnStageB()) {
@@ -972,7 +1218,32 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     // ps4rt: vertex and index buffers are resolved while the helper binds textures (their
     // commands are recorded after BeginRendering, as before).
     draw_inputs = {pipeline, draw_prepared, index_offset, is_indexed, true, false};
+    transition_picture = false;
+    std::optional<DrawVertices> canvas_vertices; ///< read once for the rules below
+    if (Ps4RtSettings::Get().internal_width) {
+        // The 2D canvas drawn scaled at a non-native internal resolution: linear filtering.
+        // The transform is only read for viewports that are not 1080 lines high.
+        using namespace Vulkan::StarOceanFill;
+        const auto& vp = regs.viewports[0];
+        const float height = std::abs(vp.yscale) * 2;
+        smooth_canvas = SmoothCanvas(Space::Canvas, height) &&
+                        DrawSpace(pipeline, *memory, vp.xscale * 2, height) == Space::Canvas;
+        // Only for art drawn at about its own size (smooth_enlargement).
+        const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        if (smooth_canvas && ps && !ps->images.empty()) {
+            const auto texture = ps->images[0].GetSharp(*ps);
+            canvas_vertices =
+                ReadDrawVertices(pipeline, regs, *memory, is_indexed, index_offset,
+                                 float(u32(texture.width) + 1), float(u32(texture.height) + 1));
+            smooth_canvas = canvas_vertices &&
+                            Enlargement(canvas_vertices->positions, canvas_vertices->texels,
+                                        canvas_vertices->corners) <= smooth_enlargement;
+        } else {
+            smooth_canvas = false;
+        }
+    }
     const bool bound = BindResources(pipeline);
+    smooth_canvas = false; // dispatches and indirect draws bind with the game's filters
     bind_prepared = nullptr; // indirect draws and dispatches bind without prepared sharps
     const bool inputs_resolved = draw_inputs.resolved;
     draw_inputs.pending = false;
@@ -1093,8 +1364,87 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
         draw_jitter = upscaler->Jitter();
     }
+    // Wide screens: a recorded movie keeps its 16:9 shape in the middle of the screen, and a
+    // picture covering the whole 2D canvas (16:9-only art) is shown as on 16:9, where nothing
+    // behind it is visible: both get black side areas while they are drawn. The transition
+    // picture is the exception: it is the game's copy of the whole wide screen, squeezed into
+    // the canvas, and is drawn across the whole width again.
+    std::optional<Vulkan::StarOceanMovie::Layout> side_bars;
+    if (state.num_color_attachments == 1 && state.width * 9 > state.height * 16) {
+        side_bars = MovieLayout(pipeline, regs, *memory, state.width, target_scale);
+        const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        const auto stretched = [&](const Quad2D& view) {
+            return Vulkan::StarOceanFill::StretchedCanvas(view.width * target_scale[0],
+                                                          view.width / view.height,
+                                                          float(instance.GetMaxViewportWidth()));
+        };
+        if (side_bars) {
+            wide_viewport = {side_bars->x, side_bars->width};
+            backgrounds.EndLayers();
+        } else if (const u32 side = Vulkan::StarOceanFill::SideWidth(state.width, state.height);
+                   side && ps && !ps->images.empty()) {
+            const auto texture = ps->images[0].GetSharp(*ps);
+            const u32 texture_width = u32(texture.width) + 1, texture_height = u32(texture.height) + 1;
+            using Vulkan::StarOceanFill::Edge;
+            // Canvas art drawn against a screen edge (star_ocean_fill.h): the texture of a cover
+            // like the loading screen's (CoverEdge) and tabs hung off the right edge (EdgeTabs).
+            const auto view = ReadView2D(pipeline, regs, *memory);
+            const bool canvas = view && view->space == Vulkan::StarOceanFill::Space::Canvas;
+            if (canvas && !canvas_vertices)
+                canvas_vertices = ReadDrawVertices(pipeline, regs, *memory, is_indexed,
+                                                   index_offset, float(texture_width),
+                                                   float(texture_height));
+            const bool quads = canvas && canvas_vertices && canvas_vertices->corners == 4;
+            if (quads && regs.num_indices >= 8)
+                edge_art.Cover(texture.Address(), texture_width, texture_height,
+                               Vulkan::StarOceanFill::CoverEdge(canvas_vertices->positions,
+                                                                canvas_vertices->texels));
+            auto edge = edge_art.Draw(texture.Address(), texture_width, texture_height);
+            if (edge == Edge::None && quads &&
+                edge_tabs.Draw(canvas_vertices->positions, canvas_vertices->texels))
+                edge = Edge::Right;
+            const auto quad =
+                edge == Edge::None ? ReadQuad2D(pipeline, regs, *memory) : std::nullopt;
+            if (edge != Edge::None) {
+                if (canvas)
+                    wide_viewport = {Vulkan::StarOceanFill::EdgeViewportX(edge, float(side)),
+                                     view->width * target_scale[0]};
+                backgrounds.EndLayers();
+            } else if (quad && Vulkan::StarOceanFill::CanvasPicture(quad->space, quad->points)) {
+                // Full-canvas picture: the transition picture and backgrounds are stretched,
+                // other pictures get black side areas.
+                bool background = false;
+                const auto vertices =
+                    transition_picture ? std::nullopt : ReadPictureVertices(pipeline, *memory);
+                if (vertices) {
+                    const Vulkan::StarOceanFill::PictureLook look{
+                        u32(texture.width) + 1, u32(texture.height) + 1, vertices->region};
+                    background = backgrounds.Picture(look, texture.Address(), vertices->see_through);
+                } else {
+                    backgrounds.EndLayers();
+                }
+                const auto wide =
+                    transition_picture || background ? stretched(*quad) : std::nullopt;
+                if (wide) {
+                    wide_viewport = *wide;
+                } else {
+                    const s32 width = s32(state.width), height = s32(quad->height);
+                    side_bars = Vulkan::StarOceanMovie::Layout{
+                        0, 0, 0, s32(side), width - s32(side), s32(side), 0, height};
+                }
+            } else if (backgrounds.Layer(texture.Address(),
+                                         quad && Vulkan::StarOceanFill::Degenerate(quad->points))) {
+                // A layer of the background just drawn: stretched the same way.
+                const auto view = ReadView2D(pipeline, regs, *memory);
+                if (view && view->space == Vulkan::StarOceanFill::Space::Canvas)
+                    if (const auto wide = stretched(*view)) wide_viewport = *wide;
+            }
+        } else {
+            backgrounds.EndLayers();
+        }
+    }
     UpdateDynamicState(pipeline, is_indexed);
-    ;
+    wide_viewport = {};
     scheduler.BeginRendering(state);
 
     const auto& vs_info = pipeline->GetStage(Shader::SwStage::Vertex);
@@ -1108,6 +1458,22 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     const u32 first_vertex = vertex_offset;
     const u32 first_instance = instance_offset;
     scheduler.Record([=](vk::CommandBuffer cmdbuf) {
+        if (side_bars) {
+            const vk::ClearAttachment clear{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .colorAttachment = 0,
+                .clearValue = vk::ClearValue{vk::ClearColorValue{std::array<float, 4>{0, 0, 0, 1}}},
+            };
+            const std::array<vk::ClearRect, 2> bars{{
+                {.rect = {{side_bars->left_x, side_bars->top},
+                          {u32(side_bars->left_w), u32(side_bars->height)}},
+                 .baseArrayLayer = 0, .layerCount = 1},
+                {.rect = {{side_bars->right_x, side_bars->top},
+                          {u32(side_bars->right_w), u32(side_bars->height)}},
+                 .baseArrayLayer = 0, .layerCount = 1},
+            }};
+            cmdbuf.clearAttachments(clear, bars);
+        }
         const auto draw = [&] {
             if (is_indexed) {
                 cmdbuf.drawIndexed(num_indices, num_instances, 0, s32(first_vertex),
@@ -1404,6 +1770,8 @@ void Rasterizer::Finish() {
 
 void Rasterizer::OnSubmit() {
     DrainDrawPipe();
+    edge_art.Submit();
+    edge_tabs.Submit();
     if (fault_process_pending) {
         fault_process_pending = false;
         buffer_cache.ProcessFaultBuffer();
@@ -1813,6 +2181,30 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
     }
 
     v.num_buffers = static_cast<u32>(guest_buffers.size());
+
+    // Wide screens: a plain colour quad covering the whole 1920x1080 canvas is a screen fill
+    // (backdrop, fade, dimmed background). A fresh copy of its positions covers the whole
+    // screen instead of the centred 16:9 area (star_ocean_fill.h). Pictures are untouched.
+    const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+    if (!ps || !ps->images.empty()) return;
+    const auto quad = ReadQuad2D(pipeline, regs, *memory);
+    if (!quad || quad->size > 64 * 1024 ||
+        memory->ClampRangeSize(quad->address, quad->size) != quad->size) return;
+    const auto widened =
+        Vulkan::StarOceanFill::Widen(quad->space, quad->points, quad->width, quad->height);
+    if (!widened) return;
+    std::vector<std::byte> copy(quad->size);
+    std::memcpy(copy.data(), reinterpret_cast<const void*>(quad->address), quad->size);
+    for (size_t i = 0; i < widened->size(); ++i)
+        std::memcpy(copy.data() + i * quad->stride, (*widened)[i].data(), 8);
+    auto& stream = buffer_cache.GetStreamBuffer();
+    const u64 offset = stream.Copy(copy.data(), quad->size, 16);
+    for (u32 i = 0; i < guest_buffers.size(); ++i) {
+        if (guest_buffers[i].base_address != quad->address ||
+            guest_buffers[i].GetStride() != quad->stride) continue;
+        v.host_buffers[i] = stream.Handle();
+        v.host_offsets[i] = offset;
+    }
 }
 
 void Rasterizer::BindIndexBuffer(u32 index_offset) {
@@ -2280,6 +2672,7 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
             mip_fallback_mode==Shader::MipStorageFallbackMode::None && !image_desc.is_written) {
             if (const auto snapshot=texture_cache.FindTransitionSnapshot(desc_entry.desc)) {
                 transition_views.emplace_back(image_bindings.size(),snapshot);
+                transition_picture = true;
                 image_bindings.emplace_back(VideoCore::ImageId{},
                     &image_desc_storage.emplace_back(desc_entry.desc));
                 image_binding_entries.push_back(nullptr);
@@ -2503,7 +2896,17 @@ void Rasterizer::BindSamplers(const Shader::Info& stage, const PreparedStage* pr
         const auto& sampler = stage.samplers[sampler_index];
         auto ssharp =
             prepared ? prepared->sampler_sharps[sampler_index] : sampler.GetSharp(stage);
-        
+        if (smooth_canvas && stage.sw_stage == Shader::SwStage::Fragment && !sampler.is_depth) {
+            // A scaled 2D canvas (star_ocean_fill.h SmoothCanvas): linear, not nearest.
+            const auto smooth = [](AmdGpu::Filter filter) {
+                return filter == AmdGpu::Filter::Point        ? AmdGpu::Filter::Bilinear
+                       : filter == AmdGpu::Filter::AnisoPoint ? AmdGpu::Filter::AnisoLinear
+                                                              : filter;
+            };
+            ssharp.xy_mag_filter.Assign(smooth(ssharp.xy_mag_filter));
+            ssharp.xy_min_filter.Assign(smooth(ssharp.xy_min_filter));
+        }
+
         const auto vk_sampler = texture_cache.GetSampler(
             ssharp, Regs().ta_bc_base, sampler.is_depth, sampler.is_depth ? 0.0f : sampler_lod_bias);
         image_infos.emplace_back(vk_sampler, VK_NULL_HANDLE, vk::ImageLayout::eGeneral);
@@ -3259,6 +3662,10 @@ void Rasterizer::UpdateViewportScissorState() const {
             viewport.y = (yoffset - yscale) * target_scale[1] + draw_jitter[1];
             viewport.width = xscale * 2.0f * target_scale[0];
             viewport.height = yscale * 2.0f * target_scale[1];
+            if (i == 0 && wide_viewport[1] > 0) { // wide screen: see wide_viewport
+                viewport.x = wide_viewport[0];
+                viewport.width = wide_viewport[1];
+            }
         }
 
         viewports.push_back(viewport);

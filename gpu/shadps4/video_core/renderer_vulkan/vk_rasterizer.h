@@ -14,6 +14,7 @@
 #include "video_core/renderer_vulkan/vk_scene_resolution.h"
 #include "video_core/renderer_vulkan/vk_object_motion.h"
 #include "video_core/renderer_vulkan/vk_draw_pipe.h"
+#include "video_core/renderer_vulkan/star_ocean_fill.h"
 #include "video_core/renderer_vulkan/vk_draw_prep.h"
 #include "video_core/renderer_vulkan/vk_temporal_upscaler.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -341,6 +342,20 @@ private:
     bool gbuffer_draw = false;
     std::unique_ptr<TemporalUpscaler> upscaler; // ps4rt: FSR (docs/upscaler.md)
     std::array<float, 2> draw_jitter{};         ///< viewport offset of the current draw, pixels
+    /// x, width of viewport 0 for a movie, the transition picture, a background, the loading
+    /// screen's corner art or a prompt on a wide screen (width 0: the game's own viewport).
+    std::array<float, 2> wide_viewport{};
+    /// The draw being recorded binds the game's screen-transition picture (a saved snapshot).
+    bool transition_picture{};
+    /// Wide screens: full-canvas pictures stretched as backgrounds (star_ocean_fill.h).
+    Vulkan::StarOceanFill::Backgrounds backgrounds;
+    /// Wide screens: the loading screen's corner art, drawn in the screen's corner.
+    Vulkan::StarOceanFill::EdgeArt edge_art;
+    /// Wide screens: the prompts hung off the right edge, drawn against the screen's edge.
+    Vulkan::StarOceanFill::EdgeTabs edge_tabs;
+    /// The draw being bound is the 2D canvas drawn scaled, art at about its own size
+    /// (star_ocean_fill.h SmoothCanvas): its nearest-filtered textures are sampled linearly.
+    bool smooth_canvas{};
     std::array<float, 2> target_scale{1.0f, 1.0f}; ///< pass drawn into the upscaler's output-size images
     const bool host_markers_enabled;
     const bool guest_markers_enabled;

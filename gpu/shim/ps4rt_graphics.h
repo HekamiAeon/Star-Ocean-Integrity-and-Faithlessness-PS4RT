@@ -18,9 +18,44 @@ inline constexpr std::array<const char*, DisplayModeCount> DisplayModeNames = {
 /// Present rate limits; 0 = unlimited.
 inline constexpr std::array<int, 5> FpsLimits = {30, 60, 120, 240, 0};
 
-/// Game patch suffixes ("Resolution Patch - <name>"); "native" is no resolution patch.
-inline constexpr std::array<std::string_view, 6> Resolutions = {"native", "480p", "720p",
-                                                                "1440p", "1800p", "4K"};
+/// Internal render resolutions (applied on restart; the Code Fairy port's list and keys): "native"
+/// is the game's own 1080p. The launcher (scripts/ps4rt_launch.py) maps the same keys to
+/// PS4RT_SO_RESOLUTION; the runtime makes the game itself render at that size and sizes its GPU
+/// heap and direct memory for it (src/runtime_resolution.c). Wider than 16:9 is experimental.
+inline constexpr std::array<std::string_view, 10> Resolutions = {
+    "native", "720p", "540p", "1440p", "2160p", "2560x1080", "3440x1440", "3840x1440", "3840x1080", "5120x1440"};
+/// "540p" renders at 1024x576 as in the Code Fairy port (a height that is a multiple of 8).
+inline constexpr std::array<int, 10> ResolutionWidths = {1920, 1280, 1024, 2560, 3840, 2560, 3440, 3840, 3840, 5120};
+inline constexpr std::array<int, 10> ResolutionHeights = {1080, 720, 576, 1440, 2160, 1080, 1440, 1440, 1080, 1440};
+/// Menu order (16:9, 21:9, 24:9, 32:9) and labels.
+inline constexpr std::array<int, 10> ResolutionMenuOrder = {2, 1, 0, 3, 4, 5, 6, 7, 8, 9};
+inline constexpr std::array<const char*, 10> ResolutionMenuLabels = {
+    "1024 x 576", "1280 x 720", "1920 x 1080", "2560 x 1440", "3840 x 2160 (4K)", "2560 x 1080",
+    "3440 x 1440", "3840 x 1440", "3840 x 1080", "5120 x 1440"};
+struct ResolutionMenuGroup {
+    const char* label;
+    int first;
+    int count;
+};
+inline constexpr std::array<ResolutionMenuGroup, 4> ResolutionMenuGroups = {{
+    {"16:9", 0, 5}, {"21:9", 5, 2}, {"24:9", 7, 1}, {"32:9", 8, 2}}};
+/// A size the game can render at instead of its own 1920x1080: 16:9 or wider (a narrower screen
+/// would cut the 2D canvas), within the limits src/runtime_resolution.c accepts.
+inline constexpr bool InternalSize(int width, int height) {
+    return width > 0 && width <= 16384 && height >= 360 && height <= 16384 && width * 9 >= height * 16 &&
+           !(width == 1920 && height == 1080);
+}
+/// A picture wider than 16:9: the game's image at an ultrawide internal resolution.
+inline constexpr bool WideImage(int width, int height) {
+    return width > 0 && height > 0 && width * 9 > height * 16;
+}
+/// Index into Resolutions of a size, or `fallback` for a size that is not in the list.
+inline constexpr int ResolutionOfSize(int width, int height, int fallback) {
+    for (std::size_t i = 0; i < ResolutionWidths.size(); ++i) {
+        if (ResolutionWidths[i] == width && ResolutionHeights[i] == height) return int(i);
+    }
+    return fallback;
+}
 /// Engine frame rate ceilings: 60 is the game's own, 120 and 240 are frame rate patches.
 inline constexpr std::array<int, 3> EngineFps = {60, 120, 240};
 

@@ -20,11 +20,13 @@ ar rcs out/libatrac9.a out/atrac9/*.o
     -lm -Lout/gpu -lps4rtgpu -Wl,-rpath,'$ORIGIN/gpu' -rdynamic "${libraries[@]}" -o out/ps4rt
 if [[ ${1:-} == --test ]]; then
     ninja -C out/gpu -j "${PS4RT_BUILD_JOBS:-4}" display-sample-gpu-test transition-snapshot-gpu-test \
-        cpu-image-writeback-test color-export-test image-subresource-test pool-reuse-test gpu-workarounds-test \
+        cpu-image-writeback-test color-export-test image-subresource-test pool-reuse-test wide-screen-test gpu-workarounds-test \
         camera-layout-test scene-camera-history-test menu-input-test menu-sounds-test graphics-settings-test \
         pipeline-binary-policy-test achievements-test achievements-ui-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc \
         tests/test_content.c src/runtime_content.c -o out/content-test
+    "$compiler" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" -I. -Isrc \
+        tests/test_runtime_resolution.c -lm -o out/runtime-resolution-test
     ctest --test-dir out/gpu --output-on-failure
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 fi

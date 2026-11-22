@@ -34,6 +34,11 @@ void runtime_rwlock_report(void);
 void runtime_set_libc_tls(const void *data, uint64_t filesz, uint64_t memsz);
 void runtime_set_module_tls(uint64_t module, const void *data, uint64_t filesz, uint64_t memsz);
 void runtime_set_procparam(void *param);
+/* Star Ocean: internal render resolution (see runtime_resolution.c). parse: 1 for a supported
+ * size, 0 for none or 1920x1080, -1 for anything else. */
+int runtime_resolution_parse(const char *text, uint32_t *width, uint32_t *height);
+uint64_t runtime_resolution_heap_bytes(uint32_t width, uint32_t height);
+int runtime_resolution_apply(unsigned char *image, uint64_t image_size);
 void **runtime_application_heap_api(void);
 uintptr_t runtime_thread_resolve(const char *name);
 uintptr_t runtime_fiber_resolve(const char *name);
