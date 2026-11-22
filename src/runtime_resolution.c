@@ -24,8 +24,9 @@
  *   Camera         The 16:9 aspect constant at 0x851098 becomes w/h. The lens code at 0xda8b8
  *                  derives the vertical view from a fixed horizontal one, which would crop the
  *                  top and bottom on a wide screen; hor_plus keeps the 16:9 vertical view.
- *   2D layer       ui_view_size keeps the 1920x1080 canvas centred at 1:1 height. marker_scale and
- *                  target_limits let markers that follow 3D positions use the whole width, and
+ *   2D layer       ui_view_size keeps the 1920x1080 canvas centred at 1:1 height. marker_source,
+ *                  marker_scale and target_limits let markers that follow 3D positions (speech
+ *                  bubbles, TARGET) use the whole width at the right height, and
  *                  note_widget with cull_test keep those markers from being culled at the
  *                  canvas edge while every other widget keeps the game's own test.
  *   Sun shadows    The sun's shadow has three depth zones. The game drops a zone that no object
@@ -137,6 +138,17 @@ static const unsigned char lens_old[] = {
 };
 static const unsigned char lens_new[] = {
     0xe9, 0x43, 0x12, 0x88, 0x00, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+};
+/* 0xdca5c: lea rsi,[rbx+0x940] (was +0xcb0). The camera keeps two copies of its projection:
+ * +0x940 for the 3D picture and +0xcb0, whose vertical scale comes from the 16:9 canvas aspect
+ * (+0xebc) instead of the screen's (+0xeb0). The UI matrix is now built from the 3D one, so a
+ * marker above or below the middle of a wide screen keeps its height (speech bubbles sat about
+ * halfway towards the middle at 32:9). At 16:9 both copies are the same. */
+static const unsigned char marker_source_old[] = {
+    0x48, 0x8d, 0xb3, 0xb0, 0x0c, 0x00, 0x00,
+};
+static const unsigned char marker_source_new[] = {
+    0x48, 0x8d, 0xb3, 0x40, 0x09, 0x00, 0x00,
 };
 /* 0xdca66: jmp marker_scale ; nops */
 static const unsigned char marker_old[] = {
@@ -431,6 +443,7 @@ static const Patch wide_patches[] = {
     SITE(0x5b04b, zone_empty),
     SITE(0x5b0cd, zone_equal),
     SITE(0xda8b8, lens),
+    SITE(0xdca5c, marker_source),
     SITE(0xdca66, marker),
     SITE(0x1d1c8a, target_clamp),
     SITE(0x202d40, set_position),
