@@ -457,21 +457,6 @@ void CompactGraphics() {
         LanguageRow();
         ImGui::EndTable();
     }
-    // Ship the user-facing sync/async choice without resurrecting the
-    // advanced Performance tab or enabling any experimental hybrid policy.
-    ImGui::SeparatorText("Shader compilation");
-    if (BeginRows("##scene_shader_mode")) {
-        CheckRow("Asynchronous compilation", s.async_shaders,
-                 "ON: smoother first-use shader loading, with occasional brief "
-                 "visual flickers. OFF: occasional shader-loading stutters, "
-                 "with more reliable rendering. Applies live and saves on close.");
-        ImGui::EndTable();
-    }
-    if (s.async_shaders) {
-        ImGui::TextDisabled("Async: smoother gameplay; minor visual flickers may occur.");
-    } else {
-        ImGui::TextDisabled("Sync: occasional shader-loading stutters; fewer visual glitches.");
-    }
     {
         ImGui::TextDisabled("Display mode, output resolution, FPS counter, FSR and sharpening apply live. Choices save on close.");
         const bool resolution_changed = s.render_resolution != s.startup_render_resolution;
@@ -566,8 +551,6 @@ void PerformanceTab() {
         static const char* const queued_labels[] = {"1 (lowest latency)", "2", "Unlimited"};
         ChoiceRow("Frames queued", s.frames_queued, queued_labels, G::FramesQueued.data(),
                   int(G::FramesQueued.size()), "More frames queued: steadier FPS, slower response to input.");
-        CheckRow("Compile new shaders in the background", s.async_shaders,
-                 "Fewer stutters in new areas; an object or effect may appear a moment later.");
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Applied on restart");

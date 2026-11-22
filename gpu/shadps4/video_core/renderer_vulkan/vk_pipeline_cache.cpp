@@ -397,8 +397,7 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
     ASSERT_MSG(cache_result == vk::Result::eSuccess, "Failed to create pipeline cache: {}",
                vk::to_string(cache_result));
     pipeline_cache = std::move(cache);
-    // ps4rt: the compiler threads always exist; the in-game menu switches async compilation live
-    // (Ps4RtSettings::async_shaders, PS4RT_ASYNC_SHADERS at start).
+    // ps4rt: new shaders and pipelines always compile on these threads (AsyncCompilation).
     {
         const auto count = std::clamp(Ps4RtThreads::Available() / 2, 1u, 6u);
         const auto capture_count = std::min(2u, std::max(1u, Ps4RtThreads::Available() / 4));
@@ -639,7 +638,7 @@ void PipelineCache::FinishCompilations() {
 }
 
 bool PipelineCache::AsyncCompilation() const {
-    return compiler && Ps4RtSettings::Get().async_shaders.load(std::memory_order_relaxed);
+    return compiler != nullptr;
 }
 
 void PipelineCache::SeedWorkerCaches() {

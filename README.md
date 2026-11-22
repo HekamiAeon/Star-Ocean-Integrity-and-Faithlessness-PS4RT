@@ -39,7 +39,7 @@ On later launches, the validated game folder is remembered, so run `bash Play-Ga
 
 Leave the extracted release folder together. The first launch creates local working data under `out/CUSA03219/` by default; your game extraction is read rather than overwritten. Quote paths containing spaces. If no valid game folder is configured, the launcher prints an example `--game` command and refers you to `PLAYER_README.txt`. No graphical folder picker or Tkinter installation is needed. The optional `--data-dir` selects a different private data directory, which must be supplied again on later launches.
 
-**Graphics are controlled in-game.** Hold **L2** and **click the right stick (R3)** to open the graphics settings. On a keyboard, press **Insert**. Choose the resolution (1080p, 1440p, 4K), upscaling (Off, FSR 3.1, or FSR 4 v07 where supported), sharpening, AF, and Sync/Async shader compilation. Use the D-pad, Cross to confirm, and Circle to go back.
+**Graphics are controlled in-game.** Hold **L2** and **click the right stick (R3)** to open the graphics settings. On a keyboard, press **Insert**. Choose the resolution (1080p, 1440p, 4K), upscaling (Off, FSR 3.1, or FSR 4 v07 where supported), sharpening, and AF. Use the D-pad, Cross to confirm, and Circle to go back.
 
 **You do NOT need to specify FSR or resolution at launch.** Those command-line options are entirely optional. If you prefer, you can start directly with FSR 4 and 4K output:
 
@@ -78,12 +78,6 @@ been independently verified.
 - Custom illustrated PS4RT in-game graphics overlay with menu sound effects.
   Open it with **Insert**, or press **L2 + R3 click**. Navigate with the D-pad,
   confirm with Cross, and go back with Circle.
-- **Synchronous / asynchronous shader compilation** is selectable live from
-  the in-game overlay, with the choice saved when the overlay closes:
-  - **Sync (default):** occasional stutters while new shaders load, with
-    more reliable rendering.
-  - **Async:** smoother gameplay during shader loading, with occasional brief
-    visual flickers in some areas.
 - **Restart Game** in the graphics menu asks for confirmation before restarting. Save in-game progress first; restarting does not create a game save.
 - **Exit Game** in the graphics menu requests confirmation before returning
   to the Linux desktop. Save your in-game progress first; this action does

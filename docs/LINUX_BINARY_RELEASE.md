@@ -48,7 +48,6 @@ Use the **D-pad** to navigate, **Cross** to select, and **Circle** to go back. Y
 - Output resolution: **1080p / 1440p / 4K**
 - Upscaling: **Off / FSR 3.1 / FSR 4 v07**, depending on hardware support
 - Sharpening and anisotropic filtering (**AF**)
-- Shader compilation: **Sync / Async**
 
 **FSR and resolution commands are optional.** You can select them using this menu instead. For people who prefer launch-time overrides, this is also supported:
 
@@ -58,7 +57,7 @@ bash Play-Game.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolutio
 
 The overlay also offers **Restart Game** with a confirmation prompt. Save your progress first, since restarting does not create a game save.
 
-**IMPORTANT: Anisotropic filtering (AF) changes require restarting the game.** Other graphics settings such as resolution, upscaling, sharpening, and Sync/Async shader compilation apply live.
+**IMPORTANT: Anisotropic filtering (AF) changes require restarting the game.** Other graphics settings such as resolution, upscaling, and sharpening apply live.
 
 ## Requirements and troubleshooting
 

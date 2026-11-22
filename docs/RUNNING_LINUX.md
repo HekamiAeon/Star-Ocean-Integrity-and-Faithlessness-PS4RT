@@ -24,7 +24,7 @@ After the first successful launch, run `bash Play-Game.sh` without `--game` to r
 
 ### Graphics: choose settings inside the game
 
-**Hold L2 and click R3 (press the right stick inward)** on a controller, or press **Insert** on the keyboard to open the PS4RT graphics menu. Set **1080p, 1440p or 4K** output, **Off / FSR 3.1 / FSR 4 v07** upscaling (as supported), sharpening, anisotropic filtering (AF), and Sync/Async shader compilation. D-pad moves, Cross confirms, Circle goes back.
+**Hold L2 and click R3 (press the right stick inward)** on a controller, or press **Insert** on the keyboard to open the PS4RT graphics menu. Set **1080p, 1440p or 4K** output, **Off / FSR 3.1 / FSR 4 v07** upscaling (as supported), sharpening, and anisotropic filtering (AF). D-pad moves, Cross confirms, Circle goes back.
 
 **FSR and resolution command-line arguments are optional.** You can set everything in the graphics menu. If you want launch-time overrides, this works too:
 
@@ -32,7 +32,7 @@ After the first successful launch, run `bash Play-Game.sh` without `--game` to r
 bash Play-Game.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
 ```
 
-**IMPORTANT: AF (anisotropic filtering) changes require a game restart to take effect.** Resolution, upscaling, sharpening, and Sync/Async shader compilation apply live. The menu saves changed settings when it closes.
+**IMPORTANT: AF (anisotropic filtering) changes require a game restart to take effect.** Resolution, upscaling, and sharpening apply live. The menu saves changed settings when it closes.
 
 The game is not included in this download. Fedora has been gameplay-tested; SteamOS and other distributions still need independent verification. See [Linux binary release](LINUX_BINARY_RELEASE.md) for the package layout.
 
@@ -87,7 +87,7 @@ A source checkout stores its generated working files under `out/CUSA03219/` by d
 
 | Location | Purpose |
 | --- | --- |
-| `out/CUSA03219/ps4rt.ini` | Saved graphics preferences, including Sync/Async |
+| `out/CUSA03219/ps4rt.ini` | Saved graphics preferences |
 | `out/CUSA03219/game-folder.txt` | Remembered game directory |
 | `out/CUSA03219/user/savedata/` | In-game saves |
 | `out/CUSA03219/user/savedata-backups/` | Save backups, when generated |
@@ -143,9 +143,8 @@ Press **Insert**, or hold **L2** and click **R3**, to open the custom Star Ocean
 - Output resolution: **1080p / 1440p / 4K**.
 - Display mode, **Off / Original**, **FSR 3.1**, or **FSR 4 v07** when supported.
 - Sharpening and anisotropic filtering (**Game default / 2× / 4× / 8× / 16×**).
-- **Asynchronous compilation** ON or OFF. **OFF (Sync)** is the fresh-install default: it may stutter when shaders first compile but has more consistent visuals. **ON (Async)** reduces shader-loading stutter but may produce brief visual flickers in some areas.
 
-Resolution, upscaler selection, sharpening, and shader compilation mode apply live; **IMPORTANT: changing anisotropic filtering (AF) requires restarting the game**. The overlay saves changed settings when you close it. The game renders its original 1080p scene before display reconstruction, so a 4K output is not native 4K game rendering. There is no bundled 60 FPS patch or frame-generation mode.
+Resolution, upscaler selection, and sharpening apply live; **IMPORTANT: changing anisotropic filtering (AF) requires restarting the game**. The overlay saves changed settings when you close it. The game renders its original 1080p scene before display reconstruction, so a 4K output is not native 4K game rendering. There is no bundled 60 FPS patch or frame-generation mode.
 
 To restart, choose **Restart Game** and confirm. To quit, choose **Exit Game**, then confirm **Exit to desktop**. Cancel or Circle/Escape returns to the game. **Save progress inside Star Ocean before exiting**; saving PS4RT graphics settings is not a game save.
 
@@ -155,4 +154,4 @@ FSR 3.1 is part of the runtime. The FSR 4 v07 shader/model files and license not
 
 Gameplay has been verified through **Chapter 4**, including the introduction, cinematics, audio, menus, controller input, exploration, battles, and saves. Fedora testing used an AMD Ryzen 7 9700X with an NVIDIA GeForce RTX 3080 Ti and AMD Radeon AI PRO R9700 (RX 9070 XT-class) across development testing. 4K output with FSR 4 v07 was also tested.
 
-**A complete playthrough and broad compatibility across Linux distributions and hardware are not verified.** Some rendering effects may have minor issues in the asynchronous shader mode. PSN functionality is not provided. Other games and PS4 title IDs are outside this game-specific release.
+**A complete playthrough and broad compatibility across Linux distributions and hardware are not verified.** PSN functionality is not provided. Other games and PS4 title IDs are outside this game-specific release.

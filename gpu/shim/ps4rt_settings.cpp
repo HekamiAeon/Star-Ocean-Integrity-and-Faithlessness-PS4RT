@@ -88,8 +88,6 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.vsync = i != 0;
     } else if (key == "fps_limit") {
         v.fps_limit = Ps4RtGraphics::ParseFpsLimit(i);
-    } else if (key == "async_shaders") {
-        v.async_shaders = i != 0;
     } else if (key == "fsr1") {
         v.fsr1 = i != 0;
     } else if (key == "spatial_aa") {
@@ -175,7 +173,7 @@ void Load() {
         {"PS4RT_REACTIVE", "reactive"},              {"PS4RT_REACTIVE_SCALE", "reactive_scale"},
         {"PS4RT_REACTIVE_THRESHOLD", "reactive_threshold"}, {"PS4RT_REACTIVE_MAX", "reactive_max"},
         {"PS4RT_UPSCALE_PRESET", "preset"},            {"PS4RT_OBJECT_MOTION", "object_motion"},
-        {"PS4RT_ASYNC_SHADERS", "async_shaders"},      {"PS4RT_DEFERRED_READBACK", "deferred_readback"},
+        {"PS4RT_DEFERRED_READBACK", "deferred_readback"},
         {"PS4RT_STALE_READBACK", "stale_readback"},     {"PS4RT_FSR1", "fsr1"},
         {"PS4RT_RCAS", "rcas"},                        {"PS4RT_FRAMES_AHEAD", "frames_queued"},
         {"PS4RT_ANISOTROPY", "anisotropy"},            {"PS4RT_VIBRATION", "vibration"},
@@ -338,12 +336,12 @@ void Save() {
                  int(v.overlay_items >> 6 & 1), v.overlay_scale.load(), v.overlay_corner.load(),
                  v.overlay_opacity.load(), v.overlay_layout.load(), v.menu_tab.load());
     std::fprintf(file,
-                 "display_mode=%s\nvsync=%d\nfps_limit=%d\nasync_shaders=%d\n"
+                 "display_mode=%s\nvsync=%d\nfps_limit=%d\n"
                  "fsr1=%d\nrcas=%d\nrcas_strength=%d\nframes_queued=%d\n"
                  "render_resolution=%s\nengine_fps=%d\ndeferred_readback=%d\nstale_readback=%d\n"
                  "restart_unconfirmed=%d\n",
                  Ps4RtGraphics::DisplayModeKeys[std::clamp(v.display_mode.load(), 0, 2)].data(),
-                 int(v.vsync.load()), v.fps_limit.load(), int(v.async_shaders.load()),
+                 int(v.vsync.load()), v.fps_limit.load(),
                  int(v.fsr1.load()), int(v.rcas.load()), v.rcas_strength.load(), v.frames_queued.load(),
                  Ps4RtGraphics::Resolutions[std::clamp(v.render_resolution.load(), 0,
                                                        int(Ps4RtGraphics::Resolutions.size()) - 1)].data(),
