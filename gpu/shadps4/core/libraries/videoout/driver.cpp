@@ -43,6 +43,7 @@ extern std::atomic<u32> g_ps4rt_compiles;
 extern std::atomic<u64> g_ps4rt_capture_ns, g_ps4rt_async_ns, g_ps4rt_compile_wait_ns;
 extern std::atomic<u64> g_ps4rt_snapshot_ns, g_ps4rt_guest_wait_ns;
 extern std::atomic<u32> g_ps4rt_pending_draws;
+extern std::atomic<u64> g_ps4rt_flips;
 } // namespace Vulkan
 
 namespace Libraries::VideoOut {
@@ -393,6 +394,7 @@ bool VideoOutDriver::SubmitFlip(VideoOutPort* port, s32 index, s64 flip_arg,
 }
 
 void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_arg, bool is_eop) {
+    ++Vulkan::g_ps4rt_flips; // GPU thread, between the draws of two frames (DrawTargetsRepeat)
     Vulkan::Frame* frame;
     if (index == -1) {
         frame = presenter->PrepareBlankFrame(false);

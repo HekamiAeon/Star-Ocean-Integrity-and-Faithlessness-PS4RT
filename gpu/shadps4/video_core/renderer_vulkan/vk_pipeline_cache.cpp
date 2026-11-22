@@ -431,6 +431,7 @@ std::atomic<u64> g_ps4rt_capture_ns, g_ps4rt_async_ns, g_ps4rt_compile_wait_ns;
 std::atomic<u64> g_ps4rt_snapshot_ns, g_ps4rt_guest_wait_ns;
 std::atomic<u32> g_ps4rt_pool_reuses;
 std::atomic<u32> g_ps4rt_pending_draws;
+std::atomic<u64> g_ps4rt_flips; ///< frames handed to the display, counted on the GPU thread
 namespace {
 struct PhaseTimer {
     std::atomic<u64>& counter;
@@ -662,6 +663,26 @@ void PipelineCache::ReportCompilerStats() {
     }
 }
 
+bool PipelineCache::DrawTargetsRepeat() {
+    // The attachments RefreshGraphicsKey binds: color targets the draw writes, and the depth
+    // buffer when it affects the draw.
+    const auto& regs = liverpool->regs;
+    std::array<VAddr, RepeatedTargets::MaxTargets> targets;
+    size_t count = 0;
+    if (regs.color_control.mode != AmdGpu::ColorControl::OperationMode::Disable) {
+        for (u32 cb = 0; cb < AmdGpu::NUM_COLOR_BUFFERS; ++cb) {
+            if (regs.color_buffers[cb] && regs.color_target_mask.GetMask(cb)) {
+                targets[count++] = regs.color_buffers[cb].Address();
+            }
+        }
+    }
+    if (GetEffectiveDepthStencilState(regs).needs_attachment && regs.depth_buffer.DepthValid()) {
+        targets[count++] = regs.depth_buffer.DepthAddress();
+    }
+    return repeated_targets.Note(g_ps4rt_flips.load(std::memory_order_relaxed),
+                                 std::span{targets.data(), count});
+}
+
 bool PipelineCache::PrepareGraphicsPipeline(PipelineSelection& worker_sel) {
     // Tessellation stages read constant buffers from memory at selection time: not prepared.
     if (worker_sel.regs->stage_enable.hs_en) {
@@ -711,6 +732,12 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
     PublishShaders();
     PublishGraphics();
     PumpWarmUp();
+    // ps4rt: a draw whose shaders or pipeline are still compiling is skipped if the game draws
+    // its targets every frame: it is back a frame or two later. Waiting for every such draw
+    // froze the frame for each new pipeline in turn (about 12 ms each in the driver, over half
+    // a second on entering some areas). Other draws still wait, so a texture the game renders
+    // only once is never left incomplete. Noted for every draw (DrawTargetsRepeat).
+    const bool skip_pending = DrawTargetsRepeat();
     used_prepared = nullptr;
     if (prepared) {
         if (const auto* pipeline = TryPreparedPipeline(*prepared)) {
@@ -723,8 +750,10 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
         if (!sel.compilation_pending) {
             return nullptr;
         }
-        // A draw may generate a texture only once. Dropping it while compilation is
-        // pending lets later compute/draws consume an image that was never produced.
+        if (skip_pending) {
+            ++g_ps4rt_pending_draws;
+            return nullptr;
+        }
         // Finish queued shader work, then select the remaining stages synchronously.
         // This also handles a full compiler queue without losing the current draw.
         {
@@ -772,6 +801,10 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             if (queued) {
                 pending_graphics.emplace(sel.graphics_key, std::move(build));
             }
+        }
+        if (skip_pending) { // queued, or the queue is full: tried again next frame
+            ++g_ps4rt_pending_draws;
+            return nullptr;
         }
         if (const auto pending = pending_graphics.find(sel.graphics_key);
             pending != pending_graphics.end()) {
