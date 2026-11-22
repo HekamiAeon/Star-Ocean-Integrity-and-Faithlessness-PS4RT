@@ -15,6 +15,7 @@
 #include "video_core/renderer_vulkan/vk_object_motion.h"
 #include "video_core/renderer_vulkan/vk_draw_pipe.h"
 #include "video_core/renderer_vulkan/star_ocean_fill.h"
+#include "video_core/renderer_vulkan/star_ocean_layers.h"
 #include "video_core/renderer_vulkan/vk_draw_prep.h"
 #include "video_core/renderer_vulkan/vk_temporal_upscaler.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -353,6 +354,8 @@ private:
     Vulkan::StarOceanFill::EdgeArt edge_art;
     /// Wide screens: the prompts hung off the right edge, drawn against the screen's edge.
     Vulkan::StarOceanFill::EdgeTabs edge_tabs;
+    /// Wide screens: layers held in front of the camera, widened (star_ocean_layers.h).
+    Vulkan::StarOceanLayers::HeldLayers held_layers;
     /// The draw being bound is the 2D canvas drawn scaled, art at about its own size
     /// (star_ocean_fill.h SmoothCanvas): its nearest-filtered textures are sampled linearly.
     bool smooth_canvas{};

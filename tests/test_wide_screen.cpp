@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Wide-screen 2D rules: screen fills, full-canvas pictures, menu backgrounds, the loading
-// screen, prompts, the pause menu's panel and recorded movies. Owned fixtures shaped like the
-// traced draws (splash backdrop and background, splash picture, menu background and its layers,
-// loading screen cover, save prompt, pause menu panel, intro movie); no game data.
+// Wide-screen rules: screen fills, full-canvas pictures, menu backgrounds, the loading screen,
+// prompts, the pause menu's panel, recorded movies and layers held in front of the camera.
+// Owned fixtures shaped like the traced draws (splash backdrop and background, splash picture,
+// menu background and its layers, ending pictures, loading screen cover, save prompt, pause menu
+// panel, credits, intro movie, a skill's tint plane, the ending's warp); no game data.
 #include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <span>
 #include <vector>
 #include "video_core/renderer_vulkan/star_ocean_fill.h"
+#include "video_core/renderer_vulkan/star_ocean_layers.h"
 #include "video_core/renderer_vulkan/star_ocean_movie.h"
 
 namespace {
@@ -495,6 +497,159 @@ void PauseMenuTests() {
 
 } // namespace
 
+// Layers held in front of the camera, with the traced world-view-projection rows at 5120x1440
+// (twice as wide as 16:9).
+void LayerTests() {
+    namespace Layers = Vulkan::StarOceanLayers;
+    using Layers::Position;
+    // A battle skill's purple tint: a flat 4x4 grid at +-5, 16 in front of the camera. On the
+    // wide picture it ends at +-0.547 (the box seen from x 1158 to 3961); on 16:9 it reached
+    // +-1.094.
+    const Layers::Rows tint{1.75f, 0, -1.49012e-08f, 0,           0, 3.55556f, 0, -0.00195312f,
+                            2.91038e-11f, 0, -0.000202041f, 10.0988f, 0, 0, 1, 16};
+    std::vector<Position> grid;
+    for (int row = 0; row <= 4; ++row)
+        for (int column = 0; column <= 4; ++column)
+            grid.push_back({-5 + 2.5f * column, -5 + 2.5f * row, 0});
+    assert(Layers::HeldOnViewAxis(tint));
+    assert(Layers::ScreenLayer(tint, grid, 2));
+    assert(!Layers::ScreenLayer(tint, grid, 1));      // 16:9: nothing to do
+    assert(!Layers::ScreenLayer(tint, grid, 1.0004f)); // within rounding of 16:9
+    // Every wide size in the menu (21:9, 24:9, 32:9): the projection's x scale is the 16:9 one
+    // (3.5 here) over the stretch, and the plane covers the 16:9 frame at each.
+    const std::array<std::array<float, 2>, 5> wide_sizes{
+        {{2560, 1080}, {3440, 1440}, {3840, 1440}, {3840, 1080}, {5120, 1440}}};
+    for (const auto& [width, height] : wide_sizes) {
+        const float stretch = (width / height) / (16.f / 9);
+        auto rows = tint;
+        rows[0] = 3.5f / stretch;
+        assert(Layers::ScreenLayer(rows, grid, stretch));
+    }
+    // A layer already reaching past the wide picture's sides is widened too, so it frames the
+    // wide picture as it framed 16:9.
+    auto wider = grid;
+    for (auto& p : wider) p[0] *= 2;
+    assert(Layers::ScreenLayer(tint, wider, 2));
+    // Too small for the 16:9 frame (a smaller plane, or one held further away): art, not a layer.
+    std::vector<Position> small = grid;
+    for (auto& p : small) p = {p[0] * 0.8f, p[1] * 0.8f, 0};
+    assert(!Layers::ScreenLayer(tint, small, 2));
+    std::vector<Position> far = grid;
+    for (auto& p : far) p[2] = 4;
+    assert(!Layers::ScreenLayer(tint, far, 2));
+    // A vertex behind the camera, an unreadable one, or too few vertices: left alone.
+    auto behind = grid;
+    behind[3][2] = -20;
+    assert(!Layers::ScreenLayer(tint, behind, 2));
+    auto bad = grid;
+    bad[7][0] = NAN;
+    assert(!Layers::ScreenLayer(tint, bad, 2));
+    assert(!Layers::ScreenLayer(tint, std::span(grid).first(2), 2));
+
+    // The ending's warp: its dark rim is a tunnel from a ring of radius 33 at depth 0.105 to one
+    // of 27 at 4.43 (traced vertices (6.64, 32.9, 0.105) and (0.316, 27, 4.43)), 13 in front of
+    // the camera: on the wide picture it ends at +-0.85, on 16:9 at +-1.7.
+    const Layers::Rows rim{0.335703f, 0, -4.65661e-10f, 0, -4.65661e-10f, 0.893572f, 0, -0.000183105f,
+                           0, 0, 1e-4f, 10, 0, -7.45058e-09f, 0.497537f, 13};
+    std::vector<Position> tunnel;
+    for (int i = 0; i < 24; ++i) {
+        const float angle = float(i) * 6.2831853f / 24;
+        tunnel.push_back({33 * std::cos(angle), 33 * std::sin(angle), 0.105f});
+        tunnel.push_back({27 * std::cos(angle), 27 * std::sin(angle), 4.43f});
+    }
+    assert(Layers::ScreenLayer(rim, tunnel, 2));
+    // At 21:9 and 24:9 the rim still reaches past the picture's sides (1.27 and 1.13 times the
+    // half-width), but its rounded edge runs through the screen's corners and its dark band over
+    // the sides: it is widened at every wide size.
+    for (const auto& [width, height] : wide_sizes) {
+        const float stretch = (width / height) / (16.f / 9);
+        auto rows = rim;
+        rows[0] = 0.335703f * 2 / stretch;
+        assert(Layers::ScreenLayer(rows, tunnel, stretch));
+    }
+    // Its bright inner tunnel (traced), far down the view axis: stays as it is.
+    const Layers::Rows inner{0.5f, -1.16415e-10f, -2.98023e-08f, 6.10352e-05f, 0, 1.33199f, -4.76837e-07f, -0.000183105f,
+                             0, 0, 1e-4f, 10, 0, -1.49012e-08f, 22, 17.9961f};
+    const std::vector<Position> inner_vertices{{-4.81f, 12.9f, 13.1f}, {-7.35f, 19, 8.74f}, {-2.31f, 13.7f, 13.1f},
+                                               {-7.12f, 11.7f, 13.1f}};
+    assert(Layers::HeldOnViewAxis(inner) && !Layers::ScreenLayer(inner, inner_vertices, 2));
+
+    // Not held on the view axis: a camera-facing billboard beside it (traced), the 2D canvas
+    // transform, a scene model (traced).
+    const Layers::Rows billboard{0.694051f, 3.72529e-09f, 2.98023e-08f, -587.627f, 2.98023e-08f, 2.46774f, 5.96046e-08f, 345.824f,
+                                 0, 0, 1e-4f, 10, 5.96046e-08f, -1.49012e-08f, 0.885199f, 1895.91f};
+    assert(!Layers::HeldOnViewAxis(billboard));
+    const Layers::Rows canvas{0.000520833f, 0, 0, -0.5f, 0, -0.00185185f, 0, 1, 0, 0, 9.10921e-05f, 0.900618f, 0, 0, 0, 1};
+    assert(!Layers::HeldOnViewAxis(canvas));
+    const Layers::Rows model{-2.207e-08f, -0.1851f, 0.1451f, -17650, 0.8289f, 0.06878f, 0.08774f, -27450,
+                             1.333e-06f, -6.115e-06f, -7.8e-06f, 10.86f, -0.03999f, 0.1834f, 0.234f, -25730};
+    assert(!Layers::HeldOnViewAxis(model));
+    auto behind_origin = tint;
+    behind_origin[15] = -16;
+    assert(!Layers::HeldOnViewAxis(behind_origin));
+    // Flat full-screen passes: w without object z (no perspective). The wide screen never
+    // narrowed them; a quad on the whole picture stays as it is.
+    const Layers::Rows identity{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    const std::vector<Position> full{{-1, -1, 0}, {1, -1, 0}, {1, 1, 0}, {-1, 1, 0}};
+    assert(!Layers::HeldOnViewAxis(identity) && !Layers::ScreenLayer(identity, full, 2));
+    auto flat = tint;
+    flat[14] = 0;
+    assert(!Layers::HeldOnViewAxis(flat) && !Layers::ScreenLayer(flat, grid, 2));
+
+    // The tint as it fades (traced): right after the whole grid, a part of it held by the same
+    // matrix. Alone the part (here the upper half) covers only some of the picture and is no
+    // layer; as a piece of the grid widened this frame or the last, it is widened with it.
+    std::vector<Position> upper;
+    for (const auto& p : grid)
+        if (p[1] >= 0) upper.push_back(p);
+    assert(!Layers::ScreenLayer(tint, upper, 2) && Layers::InFront(tint, upper));
+    Layers::HeldLayers held;
+    assert(!held.PieceOf(tint));
+    held.Widened(tint);
+    assert(held.PieceOf(tint));
+    auto rounded = tint;
+    rounded[15] = 16.00001f; // constants computed again for the piece
+    rounded[0] = 1.7500001f;
+    assert(held.PieceOf(rounded));
+    auto moved = tint;
+    moved[15] = 17; // the same object further away: another matrix
+    assert(!held.PieceOf(moved) && !held.PieceOf(rim));
+    held.Submit();
+    assert(held.PieceOf(tint)); // the grid was drawn last frame
+    held.Submit();
+    assert(!held.PieceOf(tint)); // and is gone
+    assert(!Layers::InFront(tint, behind) && !Layers::InFront(tint, {}));
+    // The table is bounded: further layers are widened but not remembered.
+    Layers::HeldLayers many;
+    for (int i = 0; i < 9; ++i) {
+        auto rows = tint;
+        rows[15] = 16.f + float(i);
+        many.Widened(rows);
+    }
+    auto ninth = tint;
+    ninth[15] = 24;
+    assert(many.PieceOf(tint) && !many.PieceOf(ninth));
+
+    // 16-bit floats, as the effect meshes store their positions.
+    assert(Layers::FloatToHalf(5) == 0x4500 && Layers::FloatToHalf(-5) == 0xc500);
+    assert(Layers::FloatToHalf(1) == 0x3c00 && Layers::FloatToHalf(10) == 0x4900);
+    assert(Layers::FloatToHalf(65504) == 0x7bff && Layers::FloatToHalf(65520) == 0x7c00);
+    assert(Layers::FloatToHalf(0) == 0 && Layers::FloatToHalf(-0.f) == 0x8000);
+    assert(Layers::FloatToHalf(std::ldexp(1.f, -24)) == 0x0001);
+    assert(Layers::FloatToHalf(std::ldexp(1.f, -26)) == 0);
+    assert(Layers::FloatToHalf(1 + std::ldexp(1.f, -11)) == 0x3c00); // tie: to even
+    assert(Layers::FloatToHalf(1 + 3 * std::ldexp(1.f, -11)) == 0x3c02);
+    assert(Layers::HalfToFloat(0x4500) == 5 && Layers::HalfToFloat(0xc500) == -5);
+    assert(Layers::HalfToFloat(0x0001) == std::ldexp(1.f, -24));
+    assert(std::isinf(Layers::HalfToFloat(0x7c00)) && std::isnan(Layers::HalfToFloat(0x7e00)));
+    for (unsigned half = 0; half < 0x10000; ++half) {
+        if (((half >> 10) & 0x1f) == 0x1f) continue;
+        assert(Layers::FloatToHalf(Layers::HalfToFloat(std::uint16_t(half))) == half);
+    }
+    assert(Layers::FloatToHalf(2 * Layers::HalfToFloat(Layers::FloatToHalf(-4.96f))) ==
+           Layers::FloatToHalf(-9.92f));
+}
+
 int main() {
     FillTests();
     BackgroundTests();
@@ -502,6 +657,7 @@ int main() {
     PromptTests();
     PauseMenuTests();
     MovieTests();
-    std::puts("PASS: wide-screen fills, pictures, backgrounds, the loading screen, prompts, the pause menu and movies");
+    LayerTests();
+    std::puts("PASS: wide-screen fills, pictures, backgrounds, the loading screen, prompts, the pause menu, movies and camera layers");
     return 0;
 }

@@ -10,6 +10,7 @@
 #include "video_core/renderer_vulkan/ui_composition.h"
 #include "video_core/renderer_vulkan/ps4rt_camera.h"
 #include "video_core/renderer_vulkan/star_ocean_fill.h"
+#include "video_core/renderer_vulkan/star_ocean_layers.h"
 #include "video_core/renderer_vulkan/star_ocean_movie.h"
 #include "ps4rt_toggles.h"
 #include "ps4rt_gpu_workarounds.h"
@@ -1159,6 +1160,132 @@ static std::optional<DrawVertices> ReadDrawVertices(const Vulkan::GraphicsPipeli
     return out;
 }
 
+// Wide screens: a layer held in front of the camera over the whole 16:9 picture, or a piece of
+// one held by the same matrix (star_ocean_layers.h). The draw's position stream from its start
+// to the last vertex it uses, with the x of every used vertex times the canvas stretch; nothing
+// for other draws. Positions are 32- or 16-bit floats.
+struct WidenedLayer {
+    VAddr address{};
+    u64 stride{};
+    std::vector<std::byte> bytes;
+};
+
+static std::optional<WidenedLayer> WidenScreenLayer(const Vulkan::GraphicsPipeline* pipeline,
+                                                    const AmdGpu::Regs& regs,
+                                                    Core::MemoryManager& memory, bool is_indexed,
+                                                    u32 index_offset,
+                                                    Vulkan::StarOceanLayers::HeldLayers& held) {
+    namespace Layers = Vulkan::StarOceanLayers;
+    const auto& fetch = pipeline->GetFetchShader();
+    const u32 count = regs.num_indices;
+    if (!fetch || count < 3 || count > 4096 || regs.IsClipDisabled() ||
+        regs.num_instances.NumInstances() != 1)
+        return {};
+    const auto& vp = regs.viewports[0];
+    const float height = std::abs(vp.yscale) * 2;
+    const float stretch = height > 0 ? vp.xscale * 2 / height / (16.f / 9.f) : 0.f;
+    if (!(stretch > 1.0005f)) return {};
+    const auto readable = [&](VAddr address, u64 bytes) {
+        return address && memory.IsValidGpuMapping(address, 0) &&
+               memory.ClampRangeSize(address, bytes) == bytes;
+    };
+    // The matrix first: most draws stop here.
+    const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+    Layers::Rows rows;
+    bool constants = false;
+    for (const auto& resource : vs.buffers) {
+        if (resource.IsSpecial()) continue;
+        const auto buffer = resource.GetSharp(vs);
+        if (!buffer.Valid() || buffer.GetSize() < sizeof(rows) ||
+            !readable(buffer.base_address, sizeof(rows)))
+            return {};
+        std::memcpy(rows.data(), reinterpret_cast<const void*>(buffer.base_address), sizeof(rows));
+        constants = true;
+        break;
+    }
+    if (!constants || !Layers::HeldOnViewAxis(rows)) return {};
+    const auto [first_vertex, first_instance] = GetDrawOffsets(regs, vs, fetch);
+    std::vector<u32> used(count);
+    if (is_indexed) {
+        const bool wide = regs.index_buffer_type.index_type != AmdGpu::IndexType::Index16;
+        const u64 size = wide ? 4 : 2;
+        const VAddr address = regs.index_base_address.Address<VAddr>() + u64(index_offset) * size;
+        if (!readable(address, count * size)) return {};
+        for (u32 i = 0; i < count; ++i) {
+            if (wide) {
+                std::memcpy(&used[i], reinterpret_cast<const void*>(address + i * size), 4);
+            } else {
+                u16 index;
+                std::memcpy(&index, reinterpret_cast<const void*>(address + i * size), 2);
+                used[i] = index == 0xffff ? ~0u : index;
+            }
+        }
+    } else {
+        for (u32 i = 0; i < count; ++i) used[i] = i;
+    }
+    std::erase(used, ~0u); // strip restarts
+    std::sort(used.begin(), used.end());
+    used.erase(std::unique(used.begin(), used.end()), used.end());
+    if (used.size() < 3) return {};
+    for (const auto& attribute : fetch->attributes) {
+        if (attribute.semantic != 0) continue;
+        const auto buffer = attribute.GetSharp(vs);
+        const u64 stride = buffer.GetStride();
+        const auto format = buffer.GetDataFmt();
+        const bool half = format == AmdGpu::DataFormat::Format16_16 ||
+                          format == AmdGpu::DataFormat::Format16_16_16_16;
+        const bool full = format == AmdGpu::DataFormat::Format32_32 ||
+                          format == AmdGpu::DataFormat::Format32_32_32 ||
+                          format == AmdGpu::DataFormat::Format32_32_32_32;
+        const bool has_z = format != AmdGpu::DataFormat::Format16_16 &&
+                           format != AmdGpu::DataFormat::Format32_32;
+        const u64 component = half ? 2 : 4;
+        const u64 last = u64(used.back()) + first_vertex;
+        const u64 bytes = (last + 1) * stride;
+        if (!buffer.Valid() || buffer.GetNumberFmt() != AmdGpu::NumberFormat::Float ||
+            !(half || full) || stride < component * (has_z ? 3 : 2) || bytes > 256 * 1024 ||
+            !readable(buffer.base_address, bytes))
+            return {};
+        WidenedLayer out{buffer.base_address, stride, std::vector<std::byte>(bytes)};
+        std::memcpy(out.bytes.data(), reinterpret_cast<const void*>(buffer.base_address), bytes);
+        const auto read = [&](u64 offset) {
+            if (half) {
+                u16 value;
+                std::memcpy(&value, out.bytes.data() + offset, 2);
+                return Layers::HalfToFloat(value);
+            }
+            float value;
+            std::memcpy(&value, out.bytes.data() + offset, 4);
+            return value;
+        };
+        std::vector<Layers::Position> positions;
+        positions.reserve(used.size());
+        for (const u32 index : used) {
+            const u64 at = (u64(index) + first_vertex) * stride;
+            positions.push_back({read(at), read(at + component), has_z ? read(at + 2 * component) : 0.f});
+        }
+        if (held.PieceOf(rows)) {
+            if (!Layers::InFront(rows, positions)) return {};
+        } else if (Layers::ScreenLayer(rows, positions, stretch)) {
+            held.Widened(rows);
+        } else {
+            return {};
+        }
+        for (size_t i = 0; i < used.size(); ++i) {
+            const u64 at = (u64(used[i]) + first_vertex) * stride;
+            const float x = positions[i][0] * stretch;
+            if (half) {
+                const u16 value = Layers::FloatToHalf(x);
+                std::memcpy(out.bytes.data() + at, &value, 2);
+            } else {
+                std::memcpy(out.bytes.data() + at, &x, 4);
+            }
+        }
+        return out;
+    }
+    return {};
+}
+
 void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw* used_prepared,
                             bool is_indexed, u32 index_offset) {
     if (DrawPipe::OnStageB()) {
@@ -1327,6 +1454,23 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                 }
                 if (layout->tab) edge_tabs.Hang(*layout->tab);
                 break;
+            }
+        }
+    }
+    // Wide screens: a layer held in front of the camera over the whole 16:9 picture is drawn
+    // from a copy of its positions widened by the canvas stretch (star_ocean_layers.h).
+    if (Ps4RtSettings::Get().internal_width) {
+        if (const auto layer = WidenScreenLayer(pipeline, regs, *memory, is_indexed, index_offset,
+                                                held_layers)) {
+            auto& stream = buffer_cache.GetStreamBuffer();
+            const u64 offset = stream.Copy(layer->bytes.data(), layer->bytes.size(), 16);
+            auto& v = vertex_binds;
+            for (size_t i = 0; i < v.guest_addresses.size(); ++i) {
+                if (v.guest_addresses[i] != layer->address || v.host_strides[i] != layer->stride)
+                    continue;
+                v.host_buffers[i] = stream.Handle();
+                v.host_offsets[i] = offset;
+                v.host_sizes[i] = layer->bytes.size();
             }
         }
     }
@@ -1843,6 +1987,7 @@ void Rasterizer::OnSubmit() {
     DrainDrawPipe();
     edge_art.Submit();
     edge_tabs.Submit();
+    held_layers.Submit();
     if (fault_process_pending) {
         fault_process_pending = false;
         buffer_cache.ProcessFaultBuffer();
