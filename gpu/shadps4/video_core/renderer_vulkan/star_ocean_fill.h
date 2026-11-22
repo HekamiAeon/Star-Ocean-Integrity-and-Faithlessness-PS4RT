@@ -7,6 +7,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 // Wide screens: the game's 2D layer stays a 1920x1080 canvas, shown in a centred 16:9 area.
@@ -145,23 +146,27 @@ struct PictureLook {
     }
 };
 
-// A full-canvas picture the game draws see-through (vertex alpha below 1) has the game
-// behind it: the main menu's background fades in over the field. Black side areas would
-// cover the field at once and switch the screen's shape, so such a picture is a background
-// and is stretched across the whole width (StretchedCanvas). A picture with the same look
-// stays stretched once it is opaque, so the menu never switches to black sides. The layers
-// the game then draws from the same texture (the menu's sparkles, glow and scan lines) are
-// stretched with it, up to the first visible draw from another texture. Pictures only ever
-// drawn opaque (the splash logos, which fade through black) keep the 16:9 shape.
+// The main menu's background is a full-canvas picture that fades in see-through (vertex alpha
+// below 1) over the field, followed at once by layers from the same texture (the menu's
+// sparkles, glow and scan lines). Black side areas would cover the field at once and switch
+// the screen's shape, so it is a background: stretched across the whole width
+// (StretchedCanvas) with its layers, up to the first visible draw from another texture, and
+// still once it is opaque, so the menu never switches to black sides.
+// The ending's character pictures also fade in and out see-through, but no layer follows them
+// (the next visible draws are the subtitles and the HUD): they are 16:9 art like the splash
+// logos (only ever opaque, faded through black) and keep the 16:9 shape. A see-through picture
+// of a new look is stretched for its first frame, the background until shown otherwise, and
+// its look is remembered as a background once a layer follows it, or as a picture when another
+// draw comes first.
 class Backgrounds {
 public:
     // A full-canvas picture from `texture`: true when it is drawn across the whole width.
     bool Picture(const PictureLook& look, unsigned long long texture, bool see_through) {
-        const auto end = looks.begin() + count;
-        bool background = std::find(looks.begin(), end, look) != end;
-        if (!background && see_through && count < looks.size()) {
-            looks[count++] = look;
-            background = true;
+        Settle(false);
+        bool background = Has(looks, look);
+        if (!background && see_through && !Has(pictures, look)) {
+            pending = look;
+            undecided = background = true;
         }
         layers = background ? texture : 0;
         return background;
@@ -169,17 +174,36 @@ public:
     // A later draw into the wide target, from `texture` (0: none): true when it is a layer of
     // the background just drawn. A visible draw from another texture ends the layers.
     bool Layer(unsigned long long texture, bool hidden) {
-        if (layers && texture == layers) return true;
-        if (!hidden) layers = 0;
+        if (layers && texture == layers) {
+            if (!hidden) Settle(true);
+            return true;
+        }
+        if (!hidden) EndLayers();
         return false;
     }
     void EndLayers() {
+        Settle(false);
         layers = 0;
     }
 
 private:
-    std::array<PictureLook, 16> looks{};
-    size_t count = 0;
+    using Looks = std::array<PictureLook, 16>;
+    static bool Has(const std::pair<Looks, size_t>& table, const PictureLook& look) {
+        return std::find(table.first.begin(), table.first.begin() + table.second, look) !=
+               table.first.begin() + table.second;
+    }
+    // Remembers the undecided picture's look as a background (a layer followed it) or as a
+    // picture; a full table remembers nothing more, and such pictures are decided each frame.
+    void Settle(bool layer) {
+        if (!undecided) return;
+        undecided = false;
+        auto& table = layer ? looks : pictures;
+        if (table.second < table.first.size()) table.first[table.second++] = pending;
+    }
+    std::pair<Looks, size_t> looks{};    ///< backgrounds
+    std::pair<Looks, size_t> pictures{}; ///< see-through pictures without layers
+    PictureLook pending{};               ///< the see-through picture awaiting its layers
+    bool undecided = false;
     unsigned long long layers = 0; ///< texture of the background whose layers may follow
 };
 

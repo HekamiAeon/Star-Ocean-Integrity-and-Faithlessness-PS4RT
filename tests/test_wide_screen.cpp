@@ -102,7 +102,8 @@ void FillTests() {
 
 // Backgrounds, in the traced draw order of the main menu: the full-canvas picture fading in
 // (alpha 0x19, then up to 0xff), the game's parked quads from other textures, the layers from
-// the picture's texture, then the portrait from another texture. Splash logos are opaque.
+// the picture's texture, then the portrait from another texture. Splash logos are opaque; the
+// ending's pictures are see-through without layers.
 void BackgroundTests() {
     const Point parked[4] = {{-100, -100}, {-100, -100}, {-100, -100}, {-100, -100}};
     const Point panel[4] = {{762, -44}, {762, 980}, {1530, 980}, {1530, -44}};
@@ -141,12 +142,47 @@ void BackgroundTests() {
     // Looks compare with a small tolerance and by texture size.
     assert((PictureLook{2048, 2048, {0, 0, 0.93751f, 0.5273f}} == menu));
     assert(!(PictureLook{2048, 1024, {0, 0, 0.9375f, 0.5273f}} == menu));
-    // The table of looks is bounded: further see-through pictures are not remembered.
+    // The table of looks is bounded: further backgrounds are stretched while see-through and
+    // followed by layers, but not remembered once opaque.
     Backgrounds full;
     for (unsigned i = 0; i < 16; ++i)
-        assert(full.Picture(PictureLook{64 + i, 64, {0, 0, 1, 1}}, 1, true));
-    assert(!full.Picture(PictureLook{1000, 64, {0, 0, 1, 1}}, 1, true));
+        assert(full.Picture(PictureLook{64 + i, 64, {0, 0, 1, 1}}, 1, true) && full.Layer(1, false));
+    const PictureLook seventeenth{1000, 64, {0, 0, 1, 1}};
+    assert(full.Picture(seventeenth, 1, true) && full.Layer(1, false));
+    assert(!full.Picture(seventeenth, 1, false));
     assert(full.Picture(PictureLook{64, 64, {0, 0, 1, 1}}, 1, false));
+
+    // The ending's character pictures, in the traced draw order: each a whole 1920x1080
+    // texture fading in and out see-through, followed by the subtitle box from another texture.
+    // Only the first frame of the first picture is stretched (still nearly transparent).
+    const PictureLook ending{1920, 1080, {0, 0, 1, 1}};
+    const unsigned long long picture1 = 0x10c6c00100, picture2 = 0x10cbd90100;
+    const unsigned long long subtitles = 0x10a3000000;
+    Backgrounds e;
+    assert(e.Picture(ending, picture1, true));
+    assert(!e.Layer(other, true));      // parked quad: decides nothing
+    assert(!e.Layer(subtitles, false)); // another texture first: a picture, not a background
+    assert(!e.Picture(ending, picture1, true) && !e.Layer(picture1, false));
+    assert(!e.Picture(ending, picture1, false)); // opaque
+    assert(!e.Picture(ending, picture1, true));  // fading out
+    assert(!e.Picture(ending, picture2, true));  // the next character
+    // The menu is still learned as a background afterwards, and the ending stays a picture.
+    assert(e.Picture(menu, menu_texture, true) && e.Layer(menu_texture, false));
+    assert(e.Picture(menu, menu_texture, false) && !e.Picture(ending, picture2, true));
+    // A see-through picture drawn last (the next draw is in another target) is a picture, and
+    // so is one followed by another full-canvas picture.
+    Backgrounds last;
+    assert(last.Picture(ending, picture1, true));
+    last.EndLayers();
+    assert(!last.Picture(ending, picture1, true));
+    Backgrounds twice;
+    assert(twice.Picture(ending, picture1, true) && !twice.Picture(logo, logo_texture, false));
+    assert(!twice.Picture(ending, picture1, true));
+    // A parked quad from the picture's own texture is no layer: the look stays undecided until a
+    // visible draw.
+    Backgrounds parked_first;
+    assert(parked_first.Picture(menu, menu_texture, true) && parked_first.Layer(menu_texture, true));
+    assert(parked_first.Layer(menu_texture, false) && parked_first.Picture(menu, menu_texture, false));
 }
 
 void MovieTests() {
