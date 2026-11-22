@@ -27,6 +27,8 @@ if [[ ${1:-} == --test ]]; then
         tests/test_content.c src/runtime_content.c -o out/content-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" -I. -Isrc \
         tests/test_runtime_resolution.c -lm -o out/runtime-resolution-test
+    "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc \
+        tests/test_pad_input.c "${libraries[@]}" -o out/pad-input-test
     ctest --test-dir out/gpu --output-on-failure
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 fi

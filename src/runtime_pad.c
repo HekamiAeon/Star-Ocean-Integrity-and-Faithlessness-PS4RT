@@ -66,7 +66,19 @@ static uint8_t connected_count;
 static uint64_t next_gamepad_scan;
 
 static uint64_t now_us(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return (uint64_t)t.tv_sec*1000000u+(uint64_t)t.tv_nsec/1000u; }
-static uint8_t axis(int16_t v) { int x=(v+32768)>>8; return (uint8_t)(x<0 ? 0 : x>255 ? 255 : x); }
+/* Stick axes reach the game as 0..255 with 128 at rest, unfiltered. The game's only dead zone is
+ * the one scePadGetControllerInformation reports (2), so a stick resting a little off center
+ * (a DualSense commonly rests at 126) keeps turning the camera. Each axis reads as centered
+ * within 8% of its travel; the rest is rescaled, so input still starts smoothly and reaches
+ * 0 and 255. */
+static uint8_t axis(int16_t v) {
+    enum { DEAD_ZONE=2621 }; /* 8% of SDL's axis range */
+    const int value=v, magnitude=value<0 ? -value : value;
+    if (magnitude<=DEAD_ZONE) return 128;
+    const int travel=value<0 ? (magnitude-DEAD_ZONE)*128/(32768-DEAD_ZONE)
+                             : (magnitude-DEAD_ZONE)*127/(32767-DEAD_ZONE);
+    return (uint8_t)(value<0 ? 128-travel : 128+travel);
+}
 static uint8_t trigger(int16_t v) { int x=v>>7; return (uint8_t)(x<0 ? 0 : x>255 ? 255 : x); }
 static uint16_t touch_axis(float v, int max) {
     return (uint16_t)(v<=0.0f ? 0 : v>=1.0f ? max : (int)(v*max+0.5f));
