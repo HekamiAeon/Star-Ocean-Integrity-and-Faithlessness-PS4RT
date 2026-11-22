@@ -355,11 +355,12 @@ private:
 // x 1682..2450 (it slides in from the edge), of which a 16:9 screen shows the first 238 pixels,
 // with the button icon and the text drawn over it. In the centred 16:9 area the whole bar would
 // show, floating past the area's edge. Art drawn at its own size (smooth_enlargement) that
-// starts in the right half of the canvas and runs past its right edge is such a tab; it is drawn
-// against the screen's right edge, and so are the draws the game then puts inside it. Other art
-// that runs past the edge does not start in the right half (the menu's description line is a
-// 2048-pixel text strip from x 92, the menu background's layers cross both edges) or is blown
-// up (the minimap's glow).
+// starts in the right half of the canvas and hangs mostly past its right edge is such a tab; it
+// is drawn against the screen's right edge, and so are the draws the game then puts inside it.
+// Other art that runs past the edge does not start in the right half (the menu's description
+// line is a 2048-pixel text strip from x 92, the menu background's layers cross both edges),
+// shows most of itself (the credits' right column: 753-pixel name strips from x 1407, text with
+// an empty tail) or is blown up (the minimap's glow).
 class EdgeTabs {
 public:
     // A canvas draw's quads: true when the draw goes against the screen's right edge.
@@ -374,6 +375,7 @@ public:
             if (!area) return false;
             visible = true;
             tabs = tabs && area->x0 >= canvas_width / 2 && area->x1 > canvas_width + 8 &&
+                   area->x1 - canvas_width > canvas_width - area->x0 &&
                    Enlargement(piece, texels.subspan(first, corners), corners) <=
                        smooth_enlargement;
             inside = inside && Inside(*area);

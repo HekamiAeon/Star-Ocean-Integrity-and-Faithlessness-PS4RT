@@ -390,6 +390,26 @@ void PromptTests() {
     assert(tabs.Draw(icon_parked, icon_parked_texels));
     // Many tabs in one frame: the table is bounded, later ones still go to the edge.
     for (int i = 0; i < 20; ++i) assert(tabs.Draw(Quad(1700, 100 + i * 40, 2400, 130 + i * 40), Quad(0, 0, 700, 30)));
+
+    // Traced credits frame: 30 name strips in the right column (753x36 pixels from x 1407,
+    // text with an empty tail, run past the edge but mostly shown) are no tabs and leave the
+    // table free; the panel's bar (from x 1436, hung by Backdrop) then holds the Skip and Back
+    // prompts against the edge in every frame, whatever name scrolls level with them.
+    EdgeTabs credits;
+    credits.Submit();
+    credits.Submit();
+    for (int i = 0; i < 30; ++i) {
+        const float y = 0.47f + 36 * i;
+        assert(!credits.Draw(Quad(1407, y, 2160, y + 36), Quad(0, 0, 753, 36)));
+        assert(!credits.Draw(Quad(1015.5f, y, 1768.5f, y + 36), Quad(0, 0, 753, 36)));
+    }
+    credits.Hang({1436, 948, 2091, 993});
+    assert(credits.Draw(Quad(1488, 952, 1560, 988), Quad(0, 0, 72, 36)));    // label
+    assert(credits.Draw(Quad(1569, 935, 1669, 985), Quad(0, 0, 100, 50)));   // button
+    assert(credits.Draw(Quad(1694, 957, 1721, 984), Quad(0, 0, 27, 27)));    // icon
+    assert(credits.Draw(Quad(1730, 935, 1830, 985), Quad(0, 0, 100, 50)));   // button
+    // A strip hanging just as far past the edge as it shows is not a tab either.
+    assert(!credits.Draw(Quad(1560, 100, 2280, 130), Quad(0, 0, 720, 30)));
 }
 
 void PauseMenuTests() {
