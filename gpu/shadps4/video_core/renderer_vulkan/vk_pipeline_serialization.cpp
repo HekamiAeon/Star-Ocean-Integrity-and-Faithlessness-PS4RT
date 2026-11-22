@@ -13,9 +13,11 @@
 #include <unordered_map>
 #include <fstream>
 #include <map>
+#include <xxhash.h>
 #ifdef _WIN32
 #include <windows.h>
 #endif
+#include "common/hash.h"
 #include "common/serdes.h"
 #include "common/scope_exit.h"
 #include "video_core/renderer_vulkan/vk_pipeline_serialization.h"
@@ -36,8 +38,10 @@
 namespace Serialization {
 /* You should increment versions below once corresponding serialization scheme is changed. */
 static constexpr u32 ShaderBinaryVersion = 9u; // ps4rt: preserve single-channel export sources
-static constexpr u32 ShaderMetaVersion = 9u; // ps4rt: refreshed color export specialization
-static constexpr u32 PipelineKeyVersion = 7u; // ps4rt: corrected color write-mask direction
+static constexpr u32 ShaderMetaVersion = 10u; // ps4rt: records the hash of its SPIR-V
+// ps4rt: 8: pipelines saved before permutations kept their numbers across sessions
+// (PipelineCache::LoadSavedPermutations) can pair shaders that do not fit together.
+static constexpr u32 PipelineKeyVersion = 8u;
 } // namespace Serialization
 
 namespace Vulkan {
@@ -600,10 +604,17 @@ void RegisterPipelineData(const GraphicsPipelineKey& key, u64 hash,
                                        fmt::format("g_{:#018x}", hash), ar.TakeOff());
 }
 
+// ps4rt: the SPIR-V and the meta of a permutation are separate files, and writes still queued
+// when the game ends are lost: the meta records the hash of its SPIR-V so that a load never
+// pairs a binary with a meta saved for another permutation.
+static u64 SpirvHash(std::span<const u32> spv) {
+    return XXH3_64bits(spv.data(), spv.size_bytes());
+}
+
 void RegisterShaderMeta(const Shader::Info& info,
                         const std::optional<Shader::Gcn::FetchShaderData>& fetch_shader_data,
                         const Shader::StageSpecialization& spec, size_t perm_hash,
-                        size_t perm_idx) {
+                        size_t perm_idx, u64 spv_hash) {
     if (!Storage::DataBase::Instance().IsOpened()) {
         return;
     }
@@ -616,6 +627,7 @@ void RegisterShaderMeta(const Shader::Info& info,
 
     meta.Write(perm_hash);
     meta.Write(perm_idx);
+    meta.Write(spv_hash);
 
     spec.Serialize(ar);
     info.Serialize(ar);
@@ -624,19 +636,28 @@ void RegisterShaderMeta(const Shader::Info& info,
                                        fmt::format("{:#018x}", perm_hash), ar.TakeOff());
 }
 
-void RegisterShaderBinary(std::vector<u32>&& spv, u64 pgm_hash, size_t perm_idx) {
+u64 RegisterShaderBinary(std::vector<u32>&& spv, u64 pgm_hash, size_t perm_idx) {
+    const u64 hash = SpirvHash(spv);
     if (!Storage::DataBase::Instance().IsOpened()) {
-        return;
+        return hash;
     }
 
     Storage::DataBase::Instance().Save(Storage::BlobType::ShaderBinary,
                                        fmt::format("{:#018x}_{}", pgm_hash, perm_idx),
                                        std::move(spv));
+    return hash;
 }
 
-bool LoadShaderMeta(Serialization::Archive& ar, Shader::Info& info,
+/// Motion vertex shaders embed session-local buffer device addresses. They must be recompiled
+/// for the current allocation, never loaded from a previous process.
+static bool SessionLocal(Shader::HwStage stage, const Shader::StageSpecialization& spec) {
+    return stage == Shader::HwStage::Vertex && spec.runtime_info.hw.vs.motion_vectors;
+}
+
+/// ps4rt: `info` may be null: the resources of a program are the same in all its permutations.
+bool LoadShaderMeta(Serialization::Archive& ar, Shader::Info* info,
                     std::optional<Shader::Gcn::FetchShaderData>& fetch_shader_data,
-                    Shader::StageSpecialization& spec, size_t& perm_idx) {
+                    Shader::StageSpecialization& spec, size_t& perm_idx, u64& spv_hash) {
     Serialization::Reader meta{ar};
 
     u32 meta_version{};
@@ -654,14 +675,11 @@ bool LoadShaderMeta(Serialization::Archive& ar, Shader::Info& info,
     u64 perm_hash_ar{};
     meta.Read(perm_hash_ar);
     meta.Read(perm_idx);
+    meta.Read(spv_hash);
 
     spec.Deserialize(ar);
-    info.Deserialize(ar);
-
-    // Motion vertex shaders embed session-local buffer device addresses. They must be
-    // recompiled for the current allocation, never loaded from a previous process.
-    if (info.hw_stage == Shader::HwStage::Vertex && spec.runtime_info.hw.vs.motion_vectors) {
-        return false;
+    if (info) {
+        info->Deserialize(ar);
     }
 
     fetch_shader_data = spec.fetch_shader_data;
@@ -828,7 +846,9 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage) 
     Shader::StageSpecialization spec{};
     spec.info = &program->info;
     size_t perm_idx{};
-    if (!LoadShaderMeta(ar, program->info, sel.fetch_shader, spec, perm_idx)) {
+    u64 spv_hash{};
+    if (!LoadShaderMeta(ar, &program->info, sel.fetch_shader, spec, perm_idx, spv_hash) ||
+        SessionLocal(program->info.hw_stage, spec)) {
         return false;
     }
 
@@ -836,7 +856,7 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage) 
     Storage::DataBase::Instance().Load(Storage::BlobType::ShaderBinary,
                                        fmt::format("{:#018x}_{}", program->info.pgm_hash, perm_idx),
                                        spv);
-    if (spv.empty()) {
+    if (spv.empty() || SpirvHash(spv) != spv_hash) {
         return false;
     }
 
@@ -874,6 +894,59 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage) 
     sel.modules[stage] = module;
 
     return true;
+}
+
+// ps4rt: on-demand startup reads no pipelines, so each session used to number the permutations
+// of a shader from 0 in the order it met them, saving each over the files an earlier session had
+// written under the same number for another permutation. The saved pipelines then paired shaders
+// that do not fit together (a driver crash in the warm-ups), and each session translated every
+// shader again. The GPU thread calls this when the game first uses a program, before a new
+// permutation takes the next free number: the saved ones keep theirs and need no translation.
+// One without usable SPIR-V keeps its number with no module; GetProgram translates it on use.
+void PipelineCache::LoadSavedPermutations(Program& program, u64 hash) {
+    static constexpr size_t MaxSavedPermutations = 1024;
+    auto& db = Storage::DataBase::Instance();
+    if (!db.IsOpened()) {
+        return;
+    }
+    for (size_t idx = 0; idx < MaxSavedPermutations; ++idx) {
+        if (idx < program.modules.size() && program.modules[idx].module) {
+            continue;
+        }
+        std::vector<u8> meta_blob;
+        db.Load(Storage::BlobType::ShaderMeta, fmt::format("{:#018x}", HashCombine(hash, u64(idx))),
+                meta_blob);
+        if (meta_blob.empty()) {
+            return;
+        }
+        Serialization::Archive ar{std::move(meta_blob)};
+        std::optional<Shader::Gcn::FetchShaderData> fetch;
+        Shader::StageSpecialization spec{};
+        size_t perm_idx{};
+        u64 spv_hash{};
+        // The first permutation brings the program's resources (Info::Deserialize also registers
+        // the user data walker, so the others skip it).
+        if (!LoadShaderMeta(ar, program.modules.empty() ? &program.info : nullptr, fetch, spec,
+                            perm_idx, spv_hash) ||
+            perm_idx != idx || program.info.pgm_hash != hash) {
+            return;
+        }
+        spec.info = &program.info;
+        vk::ShaderModule module{};
+        if (!SessionLocal(program.info.hw_stage, spec)) {
+            std::vector<u32> spv;
+            db.Load(Storage::BlobType::ShaderBinary, fmt::format("{:#018x}_{}", hash, idx), spv);
+            if (!spv.empty() && SpirvHash(spv) == spv_hash) {
+                const auto patch = GetShaderPatch(hash, program.info.hw_stage, idx, "spv");
+                module = CompileSPV(patch && EmulatorSettings.IsPatchShaders() ? *patch : spv,
+                                    instance.GetDevice());
+                Vulkan::SetObjectName(instance.GetDevice(), module,
+                                      GetShaderName(program.info.hw_stage, hash, idx));
+            }
+        }
+        std::unique_lock lk{programs_mutex};
+        program.InsertPermut(module, std::move(spec), idx);
+    }
 }
 
 bool PipelineCache::CheckCacheProfile() {
@@ -1144,18 +1217,20 @@ void PipelineCache::ReadWarmEntry(BackgroundWarmup& warm, std::vector<u8>&& data
             stage->spec.info = &stage->program->info;
             const auto io_started = std::chrono::steady_clock::now();
             u64 module_time = 0;
+            u64 spv_hash{};
             std::vector<u8> meta_blob;
             db.Load(Storage::BlobType::ShaderMeta, fmt::format("{:#018x}", hashes[i]), meta_blob);
             if (!meta_blob.empty()) {
                 Serialization::Archive meta_ar{std::move(meta_blob)};
-                if (LoadShaderMeta(meta_ar, stage->program->info, stage->fetch, stage->spec,
-                                   stage->perm_idx)) {
+                if (LoadShaderMeta(meta_ar, &stage->program->info, stage->fetch, stage->spec,
+                                   stage->perm_idx, spv_hash) &&
+                    !SessionLocal(stage->program->info.hw_stage, stage->spec)) {
                     std::vector<u32> spv;
                     db.Load(Storage::BlobType::ShaderBinary,
                             fmt::format("{:#018x}_{}", stage->program->info.pgm_hash,
                                         stage->perm_idx),
                             spv);
-                    if (!spv.empty()) {
+                    if (!spv.empty() && SpirvHash(spv) == spv_hash) {
                         const auto module_started = std::chrono::steady_clock::now();
                         stage->module = CompileSPV(spv, stage->device);
                         module_time = ElapsedNs(module_started);
@@ -1195,7 +1270,8 @@ bool PipelineCache::MergeWarmStage(WarmStage& stage) {
     }
     const auto it = std::ranges::find(program.modules, stage.spec, &Program::Module::spec);
     if (it != program.modules.end()) {
-        if (size_t(std::distance(program.modules.begin(), it)) != stage.perm_idx) {
+        if (size_t(std::distance(program.modules.begin(), it)) != stage.perm_idx ||
+            !it->module) {
             return false;
         }
         stage.result = it->module;

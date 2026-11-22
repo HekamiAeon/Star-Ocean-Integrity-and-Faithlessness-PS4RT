@@ -575,7 +575,8 @@ void PipelineCache::PublishShaders(bool wait) {
         const auto perm_hash = HashCombine(hash, build->permutation);
         Vulkan::SetObjectName(instance.GetDevice(), build->module,
                              GetShaderName(build->info.hw_stage, hash, build->permutation));
-        RegisterShaderBinary(std::move(build->binary), hash, build->permutation);
+        const u64 spv_hash =
+            RegisterShaderBinary(std::move(build->binary), hash, build->permutation);
         {
             std::unique_lock lock{programs_mutex};
             if (build->initial) {
@@ -586,7 +587,7 @@ void PipelineCache::PublishShaders(bool wait) {
             }
             build->spec.info = &program->info;
             RegisterShaderMeta(program->info, build->spec.fetch_shader_data, build->spec,
-                               perm_hash, build->permutation);
+                               perm_hash, build->permutation, spv_hash);
             program->AddPermut(build->module, std::move(build->spec));
             build->module = nullptr;
             program->pending.reset();
@@ -1167,7 +1168,7 @@ bool PipelineCache::RefreshComputeKey() {
 
 vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::RuntimeInfo& runtime_info,
                                               const std::span<const u32>& code, size_t perm_idx,
-                                              Shader::Backend::Bindings& binding) {
+                                              Shader::Backend::Bindings& binding, u64& spv_hash) {
     LOG_INFO(Render_Vulkan, "Compiling {} shader {:#x} {}", info.hw_stage, info.pgm_hash,
              perm_idx != 0 ? "(permutation)" : "");
     ;
@@ -1188,7 +1189,7 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
         module = CompileSPV(spv, instance.GetDevice());
     }
 
-    RegisterShaderBinary(std::move(spv), info.pgm_hash, perm_idx);
+    spv_hash = RegisterShaderBinary(std::move(spv), info.pgm_hash, perm_idx);
 
     const auto name = GetShaderName(info.hw_stage, info.pgm_hash, perm_idx);
     Vulkan::SetObjectName(instance.GetDevice(), module, name);
@@ -1232,7 +1233,7 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
         auto spec = Shader::StageSpecialization(info, runtime_info, profile, binding);
         runtime_fault_recover = nullptr;
         const auto it = std::ranges::find(program->modules, spec, &Program::Module::spec);
-        if (it == program->modules.end()) {
+        if (it == program->modules.end() || !it->module) {
             worker.failed = true;
             return {};
         }
@@ -1245,6 +1246,16 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
     }
 
     auto it_pgm = program_cache.find(params.hash); // this thread is the only writer
+    if (it_pgm == program_cache.end()) {
+        // ps4rt: the saved permutations first, at their own numbers (LoadSavedPermutations).
+        auto saved = std::make_unique<Program>();
+        LoadSavedPermutations(*saved, params.hash);
+        if (!saved->modules.empty()) {
+            saved->info_template = std::make_unique<Shader::Info>(saved->info);
+            std::unique_lock lock{programs_mutex};
+            it_pgm = program_cache.emplace(params.hash, std::move(saved)).first;
+        }
+    }
     const bool compile_async = AsyncCompilation() && !sel.require_complete &&
                                hw_stage != HwStage::Compute &&
                                !sel.regs->stage_enable.hs_en &&
@@ -1271,12 +1282,14 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
             return {};
         }
         auto start = binding;
+        u64 spv_hash{};
         const auto module =
-            CompileModule(new_program->info, runtime_info, params.code, 0, binding);
+            CompileModule(new_program->info, runtime_info, params.code, 0, binding, spv_hash);
         auto spec = Shader::StageSpecialization(new_program->info, runtime_info, profile, start);
         const auto perm_hash = HashCombine(params.hash, 0);
 
-        RegisterShaderMeta(new_program->info, spec.fetch_shader_data, spec, perm_hash, 0);
+        RegisterShaderMeta(new_program->info, spec.fetch_shader_data, spec, perm_hash, 0,
+                           spv_hash);
         new_program->AddPermut(module, std::move(spec));
         new_program->info_template = std::make_unique<Shader::Info>(new_program->info);
         Program* program = new_program.get();
@@ -1297,7 +1310,9 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
         return {};
     }
     if (!program->info_template) {
-        // Programs loaded by the pipeline cache warm-up get their template on first use.
+        // Programs loaded by the pipeline cache warm-up get their template on first use, and
+        // the saved permutations the warm-up has not merged yet.
+        LoadSavedPermutations(*program, params.hash);
         std::unique_lock lk{programs_mutex};
         program->info_template = std::make_unique<Shader::Info>(program->info);
     }
@@ -1331,11 +1346,23 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
             return {};
         }
         auto new_info = Shader::Info(hw_stage, sw_stage, params);
-        module = CompileModule(new_info, runtime_info, params.code, perm_idx, binding);
+        u64 spv_hash{};
+        module = CompileModule(new_info, runtime_info, params.code, perm_idx, binding, spv_hash);
 
-        RegisterShaderMeta(info, spec.fetch_shader_data, spec, perm_hash, perm_idx);
+        RegisterShaderMeta(info, spec.fetch_shader_data, spec, perm_hash, perm_idx, spv_hash);
         std::unique_lock lk{programs_mutex};
         program->AddPermut(module, std::move(spec));
+    } else if (!it->module) {
+        // ps4rt: a saved permutation without usable SPIR-V: translated at its own number.
+        perm_idx = std::distance(program->modules.begin(), it);
+        perm_hash = HashCombine(params.hash, perm_idx);
+        auto new_info = Shader::Info(hw_stage, sw_stage, params);
+        u64 spv_hash{};
+        module = CompileModule(new_info, runtime_info, params.code, perm_idx, binding, spv_hash);
+
+        RegisterShaderMeta(info, spec.fetch_shader_data, spec, perm_hash, perm_idx, spv_hash);
+        std::unique_lock lk{programs_mutex};
+        it->module = module;
     } else {
         info.AddBindings(binding);
         module = it->module;
