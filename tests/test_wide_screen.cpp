@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Wide-screen 2D rules: screen fills, full-canvas pictures, menu backgrounds, the loading
-// screen, prompts and recorded movies. Owned fixtures shaped like the traced draws (splash
-// backdrop and background, splash picture, menu background and its layers, loading screen
-// cover, save prompt, intro movie); no game data.
+// screen, prompts, the pause menu's panel and recorded movies. Owned fixtures shaped like the
+// traced draws (splash backdrop and background, splash picture, menu background and its layers,
+// loading screen cover, save prompt, pause menu panel, intro movie); no game data.
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -356,6 +356,87 @@ void PromptTests() {
     for (int i = 0; i < 20; ++i) assert(tabs.Draw(Quad(1700, 100 + i * 40, 2400, 130 + i * 40), Quad(0, 0, 700, 30)));
 }
 
+void PauseMenuTests() {
+    // Traced pause menu (one draw from its 2048x128 UI texture): one texel blown up over the
+    // whole canvas with 10 pixels of overdraw, then the OPTIONS bar along the bottom: its start
+    // at its own size, a 30-texel middle stretched to 191 pixels, a 3-pixel end past the edge.
+    std::vector<Point> panel, panel_texels;
+    const auto add = [&](std::vector<Point> quad, std::vector<Point> texels) {
+        panel.insert(panel.end(), quad.begin(), quad.end());
+        panel_texels.insert(panel_texels.end(), texels.begin(), texels.end());
+    };
+    add(Quad(-10, -10, 1929.9f, 1090), Quad(1225, 46, 1226, 47));
+    add(Quad(1597, 948, 1897, 993), Quad(1061, 0, 1361, 45));
+    add(Quad(1897, 948, 2088, 993), Quad(1361, 0, 1391, 45));
+    add(Quad(2088, 948, 2091, 993), Quad(1391, 0, 1394, 45));
+    // Not the loading screen's cover: the bar lies on the panel, it is not a hole in it.
+    assert(CoverEdge(panel, panel_texels) == Edge::None);
+    const auto layout = Backdrop(panel, panel_texels);
+    assert(layout && layout->pieces.size() == 4);
+    assert(layout->pieces[0] == Piece::Widen);
+    for (size_t i = 1; i < 4; ++i) assert(layout->pieces[i] == Piece::Right);
+    assert(layout->tab && Close(layout->tab->x0, 1597) && Close(layout->tab->x1, 2091) &&
+           Close(layout->tab->y0, 948) && Close(layout->tab->y1, 993));
+    // At 5120x1440 (twice as wide as 16:9) the panel covers the whole screen (the canvas is
+    // seen from -960 to 2880) and the bar moves by the 960-unit side area; 3440x1440 alike.
+    assert(Close(BackdropX(Piece::Widen, -10, 2), -980) && Close(BackdropX(Piece::Widen, 1929.9f, 2), 2899.8f));
+    assert(Close(BackdropX(Piece::Right, 1597, 2), 2557) && Close(BackdropX(Piece::Keep, 1597, 2), 1597));
+    const float ultrawide = (3440.f / 1440) / (16.f / 9);
+    assert(BackdropX(Piece::Widen, -10, ultrawide) < 960 - 1080 * 3440.f / 1440 / 2);
+    assert(Close(BackdropX(Piece::Right, 1920, ultrawide), 960 + 1080 * 3440.f / 1440 / 2));
+    // The OPTIONS button and label drawn afterwards are inside the bar: against the edge too.
+    EdgeTabs tabs;
+    tabs.Hang(*layout->tab);
+    assert(tabs.Draw(Quad(1649, 952, 1721, 988), Quad(1395, 0, 1438, 21)));
+    assert(tabs.Draw(Quad(1730, 935, 1830, 985), Quad(0, 0, 100, 50)));
+    assert(!tabs.Draw(Quad(0, 16, 1060, 109), Quad(0, 0, 1060, 93))); // the title banner
+    tabs.Submit();
+    assert(tabs.Draw(Quad(1649, 952, 1721, 988), Quad(1395, 0, 1438, 21))); // last frame's bar
+    tabs.Submit();
+    assert(!tabs.Draw(Quad(1649, 952, 1721, 988), Quad(1395, 0, 1438, 21)));
+
+    // The panel alone is widened; with art elsewhere (the title banner) the art stays.
+    const auto alone = Backdrop(std::span(panel).first(4), std::span(panel_texels).first(4));
+    assert(alone && alone->pieces.size() == 1 && alone->pieces[0] == Piece::Widen && !alone->tab);
+    auto with_title = std::vector<Point>(panel.begin(), panel.begin() + 4);
+    auto with_title_texels = std::vector<Point>(panel_texels.begin(), panel_texels.begin() + 4);
+    const auto title = Quad(0, 16, 1060, 109), title_texels = Quad(0, 0, 1060, 93);
+    with_title.insert(with_title.end(), title.begin(), title.end());
+    with_title_texels.insert(with_title_texels.end(), title_texels.begin(), title_texels.end());
+    const auto kept = Backdrop(with_title, with_title_texels);
+    assert(kept && kept->pieces[0] == Piece::Widen && kept->pieces[1] == Piece::Keep && !kept->tab);
+    // A parked quad is left alone and does not stop the bar.
+    auto parked = panel;
+    auto parked_texels = panel_texels;
+    const auto nowhere = Quad(-100, -100, -100, -100);
+    parked.insert(parked.end(), nowhere.begin(), nowhere.end());
+    parked_texels.insert(parked_texels.end(), nowhere.begin(), nowhere.end());
+    const auto with_parked = Backdrop(parked, parked_texels);
+    assert(with_parked && with_parked->pieces[4] == Piece::Keep && with_parked->tab);
+
+    // Not a backdrop: art covering the canvas at its own size (the menu background's layers),
+    // a solid piece short of an edge, a single quad exactly on the canvas (a picture), the
+    // loading screen's cover (no piece covers the whole canvas), unreadable or mismatched lists.
+    assert(!Backdrop(Quad(-488, -274, 2408, 1354), Quad(0, 0, 2896, 1628)));
+    assert(!Backdrop(Quad(0, 0, 1900, 1080), Quad(1225, 46, 1226, 47)));
+    assert(!Backdrop(Quad(0, 0, 1920, 1080), Quad(1225, 46, 1226, 47)));
+    const std::vector<Point> loading = {{1191, 750}, {1191, 1081}, {1922, 1081}, {1922, 750},
+                                        {0, 750},    {0, 1081},    {1191, 1081}, {1191, 750},
+                                        {0, 0},      {0, 750},     {1922, 750},  {1922, 0}};
+    std::vector<Point> loading_texels = Quad(0, 385, 731, 716);
+    for (int i = 0; i < 2; ++i) {
+        const auto patch = Quad(873, 385, 882, 394);
+        loading_texels.insert(loading_texels.end(), patch.begin(), patch.end());
+    }
+    assert(CoverEdge(loading, loading_texels) == Edge::Right);
+    assert(!Backdrop(loading, loading_texels));
+    auto bad = panel;
+    bad[2][0] = NAN;
+    assert(!Backdrop(bad, panel_texels));
+    assert(!Backdrop(panel, std::span(panel_texels).first(8)));
+    assert(!Backdrop(std::span(panel).first(6), std::span(panel_texels).first(6)));
+}
+
 } // namespace
 
 int main() {
@@ -363,7 +444,8 @@ int main() {
     BackgroundTests();
     LoadingTests();
     PromptTests();
+    PauseMenuTests();
     MovieTests();
-    std::puts("PASS: wide-screen fills, pictures, backgrounds, the loading screen, prompts and movies");
+    std::puts("PASS: wide-screen fills, pictures, backgrounds, the loading screen, prompts, the pause menu and movies");
     return 0;
 }

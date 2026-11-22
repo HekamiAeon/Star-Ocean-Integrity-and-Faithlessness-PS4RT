@@ -454,6 +454,7 @@ private:
         VertexInputs<vk::DeviceSize> host_offsets;
         VertexInputs<vk::DeviceSize> host_sizes;
         VertexInputs<vk::DeviceSize> host_strides;
+        VertexInputs<VAddr> guest_addresses; ///< the game's buffer behind each binding
         u32 num_buffers = 0;
     } vertex_binds;
     struct IndexBind {

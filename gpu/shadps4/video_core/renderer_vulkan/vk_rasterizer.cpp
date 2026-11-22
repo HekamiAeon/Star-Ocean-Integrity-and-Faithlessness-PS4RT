@@ -1091,7 +1091,8 @@ static std::optional<PictureVertices> ReadPictureVertices(const Vulkan::Graphics
 // streams ReadPictureVertices reads). Nothing when they cannot be read.
 struct DrawVertices {
     std::vector<Vulkan::StarOceanFill::Point> positions, texels;
-    size_t corners{}; ///< vertices per primitive
+    std::vector<u32> order; ///< each one's vertex in the position stream
+    size_t corners{};       ///< vertices per primitive
 };
 
 static std::optional<DrawVertices> ReadDrawVertices(const Vulkan::GraphicsPipeline* pipeline,
@@ -1154,6 +1155,7 @@ static std::optional<DrawVertices> ReadDrawVertices(const Vulkan::GraphicsPipeli
         }
     }
     if (out.positions.empty() || out.texels.empty()) return {};
+    out.order = std::move(order);
     return out;
 }
 
@@ -1257,6 +1259,75 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         ResolveVertexBuffers(pipeline, draw_prepared);
         if (is_indexed) {
             ResolveIndexBuffer(index_offset);
+        }
+    }
+    // Wide screens: a canvas draw with a backdrop (star_ocean_fill.h Backdrop) is drawn from a
+    // fresh copy of its positions, the backdrop across the whole screen and a bar hung off the
+    // right edge against the screen's right edge.
+    if (const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        Ps4RtSettings::Get().internal_width && ps && !ps->images.empty() &&
+        regs.num_indices <= 1024) {
+        using namespace Vulkan::StarOceanFill;
+        const auto view = ReadView2D(pipeline, regs, *memory);
+        if (view && view->space == Space::Canvas && !canvas_vertices) {
+            const auto texture = ps->images[0].GetSharp(*ps);
+            canvas_vertices =
+                ReadDrawVertices(pipeline, regs, *memory, is_indexed, index_offset,
+                                 float(u32(texture.width) + 1), float(u32(texture.height) + 1));
+        }
+        const auto layout = view && view->space == Space::Canvas && canvas_vertices &&
+                                    canvas_vertices->corners == 4
+                                ? Backdrop(canvas_vertices->positions, canvas_vertices->texels)
+                                : std::nullopt;
+        const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+        if (layout) {
+            for (const auto& attribute : pipeline->GetFetchShader()->attributes) {
+                if (attribute.semantic != 0) continue;
+                const auto buffer = attribute.GetSharp(vs);
+                const u64 stride = buffer.GetStride();
+                const auto& order = canvas_vertices->order;
+                const u64 bytes = (u64(*std::max_element(order.begin(), order.end())) + 1) * stride;
+                if (!buffer.Valid() || stride < 8 ||
+                    buffer.GetNumberFmt() != AmdGpu::NumberFormat::Float || bytes > 64 * 1024 ||
+                    !buffer.base_address ||
+                    !memory->IsValidGpuMapping(buffer.base_address, 0) ||
+                    memory->ClampRangeSize(buffer.base_address, bytes) != bytes)
+                    break;
+                // One way for each vertex: a vertex shared by pieces that move differently keeps
+                // the whole draw as it is.
+                std::vector<Piece> moves(bytes / stride, Piece::Keep);
+                std::vector<bool> seen(moves.size());
+                bool shared = false;
+                for (size_t i = 0; i < order.size(); ++i) {
+                    const Piece piece = layout->pieces[i / 4];
+                    shared |= seen[order[i]] && moves[order[i]] != piece;
+                    seen[order[i]] = true;
+                    moves[order[i]] = piece;
+                }
+                if (shared) break;
+                std::vector<std::byte> copy(bytes);
+                std::memcpy(copy.data(), reinterpret_cast<const void*>(buffer.base_address), bytes);
+                const float stretch = (view->width / view->height) / (canvas_width / canvas_height);
+                for (size_t i = 0; i < moves.size(); ++i) {
+                    if (moves[i] == Piece::Keep) continue;
+                    float x;
+                    std::memcpy(&x, copy.data() + i * stride, 4);
+                    x = BackdropX(moves[i], x, stretch);
+                    std::memcpy(copy.data() + i * stride, &x, 4);
+                }
+                auto& stream = buffer_cache.GetStreamBuffer();
+                const u64 offset = stream.Copy(copy.data(), bytes, 16);
+                auto& v = vertex_binds;
+                for (size_t i = 0; i < v.guest_addresses.size(); ++i) {
+                    if (v.guest_addresses[i] != buffer.base_address || v.host_strides[i] != stride)
+                        continue;
+                    v.host_buffers[i] = stream.Handle();
+                    v.host_offsets[i] = offset;
+                    v.host_sizes[i] = bytes;
+                }
+                if (layout->tab) edge_tabs.Hang(*layout->tab);
+                break;
+            }
         }
     }
     EmitVertexBuffers();
@@ -2065,6 +2136,7 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
     v.host_offsets.clear();
     v.host_sizes.clear();
     v.host_strides.clear();
+    v.guest_addresses.clear();
     auto& attributes = v.attributes;
     auto& bindings = v.bindings;
     attributes.clear();
@@ -2178,6 +2250,7 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
         }
         host_sizes.push_back(buffer.GetSize());
         host_strides.push_back(buffer.GetStride());
+        v.guest_addresses.push_back(buffer.base_address);
     }
 
     v.num_buffers = static_cast<u32>(guest_buffers.size());

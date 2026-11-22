@@ -7,14 +7,16 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <vector>
 
 // Wide screens: the game's 2D layer stays a 1920x1080 canvas, shown in a centred 16:9 area.
 // Plain colour quads that cover that whole canvas are screen fills (black backdrops behind
 // splash pictures, fades, dimmed backgrounds); on a wide screen they must cover the whole
 // screen, not the 16:9 area. Pictures keep their 16:9 shape, except the game's transition
 // picture and backgrounds the game draws see-through (StretchedCanvas, Backgrounds); the
-// loading screen's corner art goes into the screen's corner (CoverEdge, EdgeArt) and the
-// prompts hung off the right edge to the screen's right edge (EdgeTabs).
+// loading screen's corner art goes into the screen's corner (CoverEdge, EdgeArt), the
+// prompts hung off the right edge to the screen's right edge (EdgeTabs), and the pause
+// menu's panel across the whole screen (Backdrop).
 namespace Vulkan::StarOceanFill {
 
 constexpr float canvas_width = 1920;
@@ -230,40 +232,63 @@ constexpr float smooth_enlargement = 4;
 // area it would run out into the black side area. So a draw like that cover gives the canvas
 // edge its window touches, and everything drawn from its texture is drawn with the canvas
 // against that edge of the screen: the corner art sits in the screen's corner and runs off the
-// screen edge as on 16:9 (EdgeArt).
+// screen edge as on 16:9 (EdgeArt). The window is a hole in the cover: no solid piece lies
+// under it. The pause menu's panel is a solid piece over the whole canvas with a bar drawn on
+// top of it, at the right edge too; that is a Backdrop, not a cover.
 enum class Edge { None, Left, Right };
+
+struct Rect {
+    float x0{}, y0{}, x1{}, y1{};
+};
+
+// The rectangle a quad's corners span; nothing when a corner is not finite.
+inline std::optional<Rect> Bounds(std::span<const Point> piece) {
+    if (piece.empty()) return {};
+    Rect area{piece[0][0], piece[0][1], piece[0][0], piece[0][1]};
+    for (const auto& p : piece) {
+        if (!std::isfinite(p[0]) || !std::isfinite(p[1])) return {};
+        area = {std::min(area.x0, p[0]), std::min(area.y0, p[1]), std::max(area.x1, p[0]),
+                std::max(area.y1, p[1])};
+    }
+    return area;
+}
+
+inline float Overlap(const Rect& a, const Rect& b) {
+    return std::max(0.0f, std::min(a.x1, b.x1) - std::max(a.x0, b.x0)) *
+           std::max(0.0f, std::min(a.y1, b.y1) - std::max(a.y0, b.y0));
+}
 
 inline Edge CoverEdge(std::span<const Point> positions, std::span<const Point> texels) {
     constexpr size_t corners = 4;
     if (positions.size() != texels.size() || positions.size() < 2 * corners) return Edge::None;
+    constexpr Rect canvas{0, 0, canvas_width, canvas_height};
     float area = 0;
-    bool solid = false, window = false;
-    float x0 = canvas_width, y0 = canvas_height, x1 = 0, y1 = 0; // all pieces
-    float window_x0 = canvas_width, window_x1 = 0;
+    std::vector<Rect> solids, windows;
+    Rect all{canvas_width, canvas_height, 0, 0};
     for (size_t first = 0; first + corners <= positions.size(); first += corners) {
         const auto piece = positions.subspan(first, corners);
         if (Degenerate(piece)) continue;
-        float left = piece[0][0], right = left, top = piece[0][1], bottom = top;
-        for (const auto& p : piece) {
-            if (!std::isfinite(p[0]) || !std::isfinite(p[1])) return Edge::None;
-            left = std::min(left, p[0]); right = std::max(right, p[0]);
-            top = std::min(top, p[1]); bottom = std::max(bottom, p[1]);
-        }
-        x0 = std::min(x0, left); x1 = std::max(x1, right);
-        y0 = std::min(y0, top); y1 = std::max(y1, bottom);
-        area += std::max(0.0f, std::min(right, canvas_width) - std::max(left, 0.0f)) *
-                std::max(0.0f, std::min(bottom, canvas_height) - std::max(top, 0.0f));
-        if (Enlargement(piece, texels.subspan(first, corners), corners) > smooth_enlargement) {
-            solid = true;
-        } else {
-            window = true;
-            window_x0 = std::min(window_x0, left);
-            window_x1 = std::max(window_x1, right);
-        }
+        const auto bounds = Bounds(piece);
+        if (!bounds) return Edge::None;
+        all = {std::min(all.x0, bounds->x0), std::min(all.y0, bounds->y0),
+               std::max(all.x1, bounds->x1), std::max(all.y1, bounds->y1)};
+        area += Overlap(*bounds, canvas);
+        if (Enlargement(piece, texels.subspan(first, corners), corners) > smooth_enlargement)
+            solids.push_back(*bounds);
+        else
+            windows.push_back(*bounds);
     }
-    if (!solid || !window || x0 > 0.5f || y0 > 0.5f || x1 < canvas_width - 0.5f ||
-        y1 < canvas_height - 0.5f || area < canvas_width * canvas_height * 0.99f)
+    if (solids.empty() || windows.empty() || all.x0 > 0.5f || all.y0 > 0.5f ||
+        all.x1 < canvas_width - 0.5f || all.y1 < canvas_height - 0.5f ||
+        area < canvas_width * canvas_height * 0.99f)
         return Edge::None;
+    float window_x0 = canvas_width, window_x1 = 0;
+    for (const auto& window : windows) {
+        for (const auto& solid : solids)
+            if (Overlap(window, solid) > 0.01f * Overlap(window, window)) return Edge::None;
+        window_x0 = std::min(window_x0, window.x0);
+        window_x1 = std::max(window_x1, window.x1);
+    }
     const bool left = window_x0 <= 0.5f, right = window_x1 >= canvas_width - 0.5f;
     return left == right ? Edge::None : right ? Edge::Right : Edge::Left;
 }
@@ -333,11 +358,15 @@ public:
         if (tabs) {
             for (size_t first = 0; first + corners <= positions.size(); first += corners) {
                 const auto piece = positions.subspan(first, corners);
-                if (!Degenerate(piece) && count < current.size()) current[count++] = *Bounds(piece);
+                if (!Degenerate(piece)) Hang(*Bounds(piece));
             }
             return true;
         }
         return inside;
+    }
+    // A tab drawn within another draw (Backdrop): the draws inside it go to the edge too.
+    void Hang(const Rect& tab) {
+        if (count < current.size()) current[count++] = tab;
     }
     // The game finished a frame (submitted its work). Tabs of this frame and the last one hold
     // the draws inside them.
@@ -348,22 +377,10 @@ public:
     }
 
 private:
-    struct Area {
-        float x0{}, y0{}, x1{}, y1{};
-    };
-    static std::optional<Area> Bounds(std::span<const Point> piece) {
-        Area area{piece[0][0], piece[0][1], piece[0][0], piece[0][1]};
-        for (const auto& p : piece) {
-            if (!std::isfinite(p[0]) || !std::isfinite(p[1])) return {};
-            area = {std::min(area.x0, p[0]), std::min(area.y0, p[1]), std::max(area.x1, p[0]),
-                    std::max(area.y1, p[1])};
-        }
-        return area;
-    }
     // Within a tab's width, its middle line within the tab's height.
-    bool Inside(const Area& area) const {
+    bool Inside(const Rect& area) const {
         const float middle = (area.y0 + area.y1) / 2;
-        const auto within = [&](const Area& tab) {
+        const auto within = [&](const Rect& tab) {
             return area.x0 >= tab.x0 - 0.5f && area.x1 <= tab.x1 + 0.5f && middle >= tab.y0 &&
                    middle <= tab.y1;
         };
@@ -373,9 +390,73 @@ private:
             if (within(previous[i])) return true;
         return false;
     }
-    std::array<Area, 8> current{}, previous{};
+    std::array<Rect, 8> current{}, previous{};
     size_t count = 0, previous_count = 0;
 };
+
+// The pause menu draws its dark panel and the bar along its bottom as one draw from its UI
+// texture: a few texels of one colour blown up over the whole canvas (with a little overdraw),
+// then the bar's three pieces on top, running off the right edge like the prompts (EdgeTabs).
+// In the centred 16:9 area the panel would end at the area's edges and leave the game beside
+// it undimmed. So a solid piece (enlarged more than smooth_enlargement) covering the whole
+// canvas is a backdrop and is widened across the whole screen, as on 16:9; when the draw's
+// other pieces together start in the right half and run past the right edge, they are a bar
+// hung off that edge and go against the screen's right edge (with the draws inside them,
+// EdgeTabs::Hang). Other pieces stay where they are. A single quad exactly on the canvas is a
+// picture (CanvasPicture) and is left to those rules.
+enum class Piece : unsigned char { Keep, Widen, Right };
+
+struct BackdropLayout {
+    std::vector<Piece> pieces; ///< one per quad, in draw order
+    std::optional<Rect> tab;   ///< the pieces that go against the right edge
+};
+
+inline std::optional<BackdropLayout> Backdrop(std::span<const Point> positions,
+                                              std::span<const Point> texels) {
+    constexpr size_t corners = 4;
+    if (positions.size() != texels.size() || positions.size() < corners ||
+        positions.size() % corners)
+        return {};
+    if (positions.size() == corners && CanvasPicture(Space::Canvas, positions)) return {};
+    BackdropLayout out;
+    out.pieces.assign(positions.size() / corners, Piece::Keep);
+    bool backdrop = false, others = false;
+    Rect rest{canvas_width, canvas_height, 0, 0};
+    for (size_t first = 0; first < positions.size(); first += corners) {
+        const auto piece = positions.subspan(first, corners);
+        if (Degenerate(piece)) continue;
+        const auto area = Bounds(piece);
+        if (!area) return {};
+        if (area->x0 <= 0.5f && area->y0 <= 0.5f && area->x1 >= canvas_width - 0.5f &&
+            area->y1 >= canvas_height - 0.5f &&
+            Enlargement(piece, texels.subspan(first, corners), corners) > smooth_enlargement) {
+            out.pieces[first / corners] = Piece::Widen;
+            backdrop = true;
+        } else {
+            others = true;
+            rest = {std::min(rest.x0, area->x0), std::min(rest.y0, area->y0),
+                    std::max(rest.x1, area->x1), std::max(rest.y1, area->y1)};
+        }
+    }
+    if (!backdrop) return {};
+    if (others && rest.x0 >= canvas_width / 2 && rest.x1 > canvas_width + 8) {
+        out.tab = rest;
+        for (size_t i = 0; i < out.pieces.size(); ++i) {
+            const auto piece = positions.subspan(i * corners, corners);
+            if (out.pieces[i] == Piece::Keep && !Degenerate(piece)) out.pieces[i] = Piece::Right;
+        }
+    }
+    return out;
+}
+
+// A backdrop piece's canvas x on a target `stretch` times as wide as 16:9: widened about the
+// centre, or moved by the side area's width (in canvas units) against the right edge.
+inline float BackdropX(Piece piece, float x, float stretch) {
+    const float centre = canvas_width / 2;
+    return piece == Piece::Widen   ? centre + (x - centre) * stretch
+           : piece == Piece::Right ? x + centre * (stretch - 1)
+                                   : x;
+}
 
 // The viewport x (the game's is 0) that draws the canvas against `edge` of a target with
 // `side`-pixel side areas, instead of in its centred 16:9 area.
