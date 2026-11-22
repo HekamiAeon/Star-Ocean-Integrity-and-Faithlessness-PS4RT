@@ -138,6 +138,24 @@ static ABI int32_t netctl_nat(uint32_t *info) {
 }
 static ABI int32_t lib_init_id(void) { return new_id(); }
 static ABI int32_t ok_void(void) { return 0; }
+/* After the final movie the game sets the console's video recording info, starts the PS4
+ * broadcast service and switches its permission. Recording and broadcasting are left to the
+ * host (for example OBS): each call is acknowledged, its arguments are not read, and nothing
+ * is recorded or streamed. Without them the port stopped before the ending credits. */
+static ABI int32_t video_recording_set_info(void) {
+    note("video recording metadata acknowledged (console recording unavailable)");
+    return 0;
+}
+static ABI int32_t live_streaming_initialize(uint64_t heap_size) {
+    (void)heap_size;
+    note("live streaming initialization acknowledged (console broadcasting unavailable)");
+    return 0;
+}
+static ABI int32_t live_streaming_enable(int32_t enable) {
+    (void)enable;
+    note("live streaming permission acknowledged (host capture unchanged)");
+    return 0;
+}
 /* Console screenshot configuration only. Capture requests remain unresolved;
  * host F12 screenshots are a separate presenter feature. Retain the overlay
  * parameters without inventing an interpretation of the console origin enum. */
@@ -612,6 +630,9 @@ static ABI int32_t audio_in_open(void) { return AUDIO_IN_NOT_OPENED; }
 
 
 static const RuntimeExport exports[]={
+    {"sceVideoRecordingSetInfo",video_recording_set_info},
+    {"sceGameLiveStreamingInitialize",live_streaming_initialize},
+    {"sceGameLiveStreamingEnableLiveStreaming",live_streaming_enable},
     {"sceScreenShotDisable",screenshot_disable},
     {"sceScreenShotEnable",screenshot_enable},
     {"sceScreenShotSetOverlayImageWithOrigin",screenshot_overlay},
