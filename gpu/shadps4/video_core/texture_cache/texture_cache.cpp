@@ -1282,13 +1282,16 @@ ImageView& TextureCache::FindDepthTarget(ImageId image_id, const ImageDesc& desc
         image.info.meta_info.htile_addr = desc.info.meta_info.htile_addr;
     }
 
-    // If there is a stencil attachment, link depth and stencil.
+    // If there is a stencil attachment, link depth and stencil. Another depth image at the
+    // stencil address is left alone (CanBeStencilPlane); a stencil image is made beside it.
     if (desc.info.stencil_addr != 0) {
         ImageId stencil_id{};
         ForEachImageInRegion(desc.info.stencil_addr, desc.info.stencil_size,
-                             [&](ImageId image_id, Image& image) {
-                                 if (image.info.guest_address == desc.info.stencil_addr) {
-                                     stencil_id = image_id;
+                             [&](ImageId candidate_id, Image& candidate) {
+                                 if (candidate.info.guest_address == desc.info.stencil_addr &&
+                                     (candidate_id == image_id ||
+                                      CanBeStencilPlane(candidate.info))) {
+                                     stencil_id = candidate_id;
                                  }
                              });
         if (!stencil_id) {

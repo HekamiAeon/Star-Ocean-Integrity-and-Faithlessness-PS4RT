@@ -35,6 +35,10 @@ bool IsOverwrittenPoolImage(bool gpu_modified, bool cpu_dirty, bool in_use) {
     return gpu_modified && cpu_dirty && !in_use;
 }
 
+bool CanBeStencilPlane(const ImageInfo& image) {
+    return !image.props.is_depth;
+}
+
 std::optional<u32> GetPaddedMipSlice(const ImageInfo& requested, const ImageInfo& parent,
                                    u32 mip) {
     if (requested.resources.levels != 1 || requested.resources.layers != 1 ||
