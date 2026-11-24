@@ -20,11 +20,27 @@ inline bool IsFsr4(int upscaler) {
 enum Preset : int { NativeAA = 0, Quality, Balanced, Performance, UltraPerformance, PresetCount };
 enum DebugView : int { DebugNone = 0, DebugReactive = 1, DebugMotion = 2, DebugViewCount };
 
-/// Live output resolutions: the upscaler's output and the UI host targets.
-inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840};
-inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160};
-inline constexpr int OutputCount = 4;
-inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
+/// FSR output resolutions (live): the upscaler's output and the HUD's host targets (the Sakura
+/// Wars port's list). 0 is Native (FSR anti-aliasing at the internal resolution).
+inline constexpr int OutputWidths[] = {0, 1920, 2560, 3840, 3440, 3840, 5120};
+inline constexpr int OutputHeights[] = {0, 1080, 1440, 2160, 1440, 1440, 1440};
+inline constexpr int OutputCount = 7;
+inline constexpr int OutputNative = 0;
+inline constexpr int OutputDefault = OutputNative;
+
+/// An output can be chosen for an internal resolution when it is larger in both dimensions, at
+/// most 3x (FSR's range), and has the same aspect within 1% (2560x1080 -> 3440x1440 is the only
+/// inexact pair). Native always.
+bool OutputAllowed(int internal_width, int internal_height, int output);
+/// The scene size this launch renders at: the internal resolution (PS4RT_SO_RESOLUTION, applied
+/// by src/runtime_resolution.c), else 1920x1080. Fixed for the run (Load).
+void SceneSize(int& width, int& height);
+/// The game's display buffer size this launch: the resolution patch creates the screen buffers
+/// and the display view at the scene size, so it is the scene size.
+void GameDisplaySize(int& width, int& height);
+/// The FSR output this frame: the chosen output fitted to the scene's aspect, or the scene size
+/// for Native or a choice that does not fit this launch's internal resolution.
+void FsrOutputSize(int& width, int& height);
 
 struct Values {
     // Star Ocean-derived native-scene path: this template is intentionally game-adaptable.
@@ -61,17 +77,16 @@ struct Values {
     std::atomic<bool> rcas_applied{false};
     /// Set by the presenter: the game's image and the window it is shown in, in pixels.
     std::atomic<int> image_width{0}, image_height{0}, window_width{0}, window_height{0};
+    /// Set by the presenter: the game's own display buffer (before FSR), in pixels.
+    std::atomic<int> game_width{0}, game_height{0};
     std::atomic<int> frames_queued{1};
     /// Controller vibration strength in percent; 0 turns it off (runtime_pad.c). Live.
     std::atomic<int> vibration{100};
     // Startup: run.py turns them into patches and environment variables; "Apply and restart".
     std::atomic<int> render_resolution{0};
     /// The internal resolution this launch runs at (PS4RT_SO_RESOLUTION, applied by
-    /// src/runtime_resolution.c); 0 at the game's own 1920x1080. The FSR scene path is built for
-    /// the 1080p scene, so the upscaler is held off at every other size: kept_upscaler is the
-    /// saved choice, which Save() writes back for the next 1920x1080 launch.
+    /// src/runtime_resolution.c); 0 at the game's own 1920x1080.
     int internal_width = 0, internal_height = 0;
-    int kept_upscaler = UpscalerOff;
     std::atomic<int> engine_fps{120};
     std::atomic<bool> deferred_readback{true};
     std::atomic<bool> stale_readback{true};

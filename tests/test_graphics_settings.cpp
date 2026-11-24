@@ -43,6 +43,9 @@ int main() {
         std::fclose(old);
         s.vsync = true;
     }
+    // Outputs only persist when larger than the internal resolution (same aspect): use 720p
+    // (Resolutions index 1) so 1080p, 1440p and 4K outputs are all valid.
+    s.render_resolution = 1;
     for (int provider : {UpscalerOff, UpscalerFsr3, UpscalerFsr4}) {
         for (int output : {1, 2, 3}) {
             s.sharpen = true;
@@ -54,6 +57,7 @@ int main() {
             Load();
             assert(s.upscaler == provider && s.startup_upscaler == provider);
             assert(s.output_res == output && s.startup_output_res == output);
+            assert(s.render_resolution == 1 && s.startup_render_resolution == 1);
             assert(s.sharpness > 0.419f && s.sharpness < 0.421f);
             assert(s.anisotropy == 16 && s.startup_anisotropy == 16);
             assert(!s.object_motion && !s.fsr1 && !s.spatial_aa);
@@ -69,6 +73,83 @@ int main() {
     unsetenv("PS4RT_OUTPUT_RES");
     Load();
     assert(!s.object_motion && s.temporal_problem);
+
+    // FSR output choices follow the internal resolution (the Sakura Wars port's rules): larger in
+    // both dimensions, at most 3x and the same aspect; Native (AA only) always.
+    for (int r = 0; r < int(Ps4RtGraphics::Resolutions.size()); ++r)
+        assert(OutputAllowed(Ps4RtGraphics::ResolutionWidths[r], Ps4RtGraphics::ResolutionHeights[r], OutputNative));
+    assert(OutputAllowed(1280, 720, 1) && OutputAllowed(1280, 720, 3) && !OutputAllowed(1280, 720, 4));
+    assert(OutputAllowed(1024, 576, 1) && OutputAllowed(1024, 576, 2) && !OutputAllowed(1024, 576, 3));
+    assert(!OutputAllowed(1920, 1080, 1) && OutputAllowed(1920, 1080, 2) && OutputAllowed(1920, 1080, 3));
+    for (int o = 1; o < OutputCount; ++o) assert(!OutputAllowed(3840, 2160, o)); // 4K: AA only
+    assert(OutputAllowed(2560, 1080, 4) && !OutputAllowed(2560, 1080, 2) && !OutputAllowed(2560, 1080, 6));
+    assert(OutputAllowed(3840, 1080, 6) && !OutputAllowed(3840, 1080, 5));
+    assert(!OutputAllowed(5120, 1440, 6) && !OutputAllowed(1920, 1080, -1) && !OutputAllowed(1920, 1080, OutputCount));
+    // A saved output that does not fit the saved internal resolution becomes Native; Native is
+    // saved as "native".
+    s.render_resolution = Ps4RtGraphics::ParseResolution("2160p");
+    s.output_res = 2;
+    Save();
+    Load();
+    assert(s.output_res == OutputNative && s.render_resolution == 4);
+    s.render_resolution = Ps4RtGraphics::ParseResolution("2560x1080");
+    s.output_res = 4;
+    Save();
+    Load();
+    assert(s.output_res == 4 && s.render_resolution == 5);
+    s.output_res = OutputNative;
+    Save();
+    Load();
+    assert(s.output_res == OutputNative);
+    // An older ini's 1920x1080 output at the 1080p internal resolution: Native (the same image).
+    {
+        FILE* old = std::fopen(path, "w");
+        assert(old);
+        std::fputs("upscaler=fsr3\nrender_resolution=native\noutput_res=1920x1080\n", old);
+        std::fclose(old);
+        Load();
+        assert(s.output_res == OutputNative && s.upscaler == UpscalerFsr3 && s.render_resolution == 0);
+    }
+    // A 1280x720 launch renders and displays at that size; the FSR output is the choice fitted
+    // to the scene aspect, or the scene size for Native or a choice that does not fit it.
+    setenv("PS4RT_SO_RESOLUTION", "1280x720", 1);
+    Load();
+    int w = 0, h = 0;
+    SceneSize(w, h);
+    assert(w == 1280 && h == 720);
+    GameDisplaySize(w, h);
+    assert(w == 1280 && h == 720);
+    s.output_res = 2;
+    FsrOutputSize(w, h);
+    assert(w == 2560 && h == 1440);
+    s.output_res = OutputNative;
+    FsrOutputSize(w, h);
+    assert(w == 1280 && h == 720);
+    s.output_res = 4; // 3440x1440 is not 16:9
+    FsrOutputSize(w, h);
+    assert(w == 1280 && h == 720);
+    // Ultrawide: 2560x1080 to 3440x1440 is fitted at the scene's aspect (3414x1440); 3840x1080
+    // to 5120x1440 is exact.
+    setenv("PS4RT_SO_RESOLUTION", "2560x1080", 1);
+    Load();
+    s.output_res = 4;
+    FsrOutputSize(w, h);
+    assert(w == 3414 && h == 1440);
+    setenv("PS4RT_SO_RESOLUTION", "3840x1080", 1);
+    Load();
+    s.output_res = 6;
+    FsrOutputSize(w, h);
+    assert(w == 5120 && h == 1440);
+    unsetenv("PS4RT_SO_RESOLUTION");
+    Load();
+    SceneSize(w, h);
+    assert(w == 1920 && h == 1080);
+    s.output_res = 3;
+    FsrOutputSize(w, h);
+    assert(w == 3840 && h == 2160);
+    s.output_res = OutputNative;
+    s.render_resolution = 0; // the sections below start from the game's own size
+    Save();
     // Game language (ps4rt_launch.py protocol): the env carries the active console language;
     // ps4rt.ini only ever carries a pending change, never read back by Load().
     const auto ini_language = [&] {
@@ -159,8 +240,7 @@ int main() {
     assert(GraphicsNeedRestart());
     Save();
     // The launcher passes the saved choice as a size. The launch runs at that size with the
-    // upscaler held off, and the saved upscaler choice survives a save made during it. That
-    // holds for an ultrawide size and for a 16:9 one, smaller or larger than 1080p.
+    // saved upscaler, for an ultrawide size and for a 16:9 one, smaller or larger than 1080p.
     const struct { const char* size; int width, height, choice; } launches[] = {
         {"3440x1440", 3440, 1440, 6}, {"1280x720", 1280, 720, 1}, {"1024x576", 1024, 576, 2},
         {"3840x2160", 3840, 2160, 4}};
@@ -172,7 +252,7 @@ int main() {
         assert(s.internal_width == launch.width && s.internal_height == launch.height);
         assert(s.render_resolution == launch.choice && s.startup_render_resolution == launch.choice);
         assert(!GraphicsNeedRestart());
-        assert(s.upscaler == UpscalerOff && s.kept_upscaler == UpscalerFsr3 && !s.jitter);
+        assert(s.upscaler == UpscalerFsr3 && s.jitter);
         s.render_resolution = 0;
         assert(GraphicsNeedRestart());
         Save();
@@ -184,7 +264,7 @@ int main() {
     setenv("PS4RT_SO_RESOLUTION", "2880x1200", 1);
     Load();
     assert(s.internal_width == 2880 && s.internal_height == 1200 && s.render_resolution == 0);
-    assert(s.upscaler == UpscalerOff && s.kept_upscaler == UpscalerFsr3);
+    assert(s.upscaler == UpscalerFsr3);
     // The game's own size, a size narrower than 16:9, malformed text or an empty value is an
     // ordinary launch.
     for (const char* text : {"1920x1080", "1440x1080", "3440", "3440x1440x", "wide", ""}) {
@@ -194,6 +274,6 @@ int main() {
     }
     unsetenv("PS4RT_SO_RESOLUTION");
     unlink(path);
-    std::puts("PASS: native-scene settings persistence, native-port defaults, the pending game-language protocol "
-              "and the internal resolution option");
+    std::puts("PASS: native-scene settings persistence, native-port defaults, the pending game-language protocol, "
+              "the internal resolution option and the FSR output choices");
 }

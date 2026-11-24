@@ -93,9 +93,15 @@ class InternalResolutionTests(unittest.TestCase):
         self.assertIn("for (const auto& group : G::ResolutionMenuGroups)", choice)
         self.assertIn("ImGui::SeparatorText(group.label);", choice)
         self.assertIn("Store(target, G::ResolutionMenuOrder[i], true);", choice)
-        # At another internal resolution the output list and the FSR choice are shown as fixed.
-        self.assertIn('InfoRow("Output resolution", text);', compact)
-        self.assertIn('InfoRow("Upscaling / anti-aliasing", "Off (available at 1920 x 1080 only)");', compact)
+        # The applied size, then FSR outputs for the selected internal resolution (the Sakura Wars
+        # port's layout); FSR is offered at every internal resolution.
+        self.assertIn('InfoRow("Current Applied Resolution:", text);', compact)
+        self.assertIn('ChoiceRow("FSR Upscale output", s.output_res, labels, values, count,', compact)
+        self.assertIn("if (!Ps4RtSettings::OutputAllowed(iw, ih, o)) continue;", compact)
+        self.assertLess(compact.index('Row("Internal resolution");'), compact.index('"Current Applied Resolution:"'))
+        self.assertLess(compact.index('"Current Applied Resolution:"'), compact.index('"FSR Upscale output"'))
+        self.assertLess(compact.index('"FSR Upscale output"'), compact.index('"Upscaling / anti-aliasing"'))
+        self.assertNotIn("available at 1920 x 1080 only", compact)
         changes = overlay.split("int RestartChanges() {", 1)[1].split("}", 1)[0]
         self.assertIn("s.render_resolution != s.startup_render_resolution", changes)
         main = (ROOT / "scripts/ps4rt_launch.py").read_text().split("def main(", 1)[1]

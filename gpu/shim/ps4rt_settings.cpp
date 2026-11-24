@@ -3,6 +3,7 @@
 #include "ps4rt_graphics.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -119,7 +120,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
     } else if (key == "live_resolution") {
         v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
     } else if (key == "output_res") {
-        for (int r = 0; r < OutputCount; ++r) {
+        if (value == "native") v.output_res = OutputNative;
+        for (int r = 1; r < OutputCount; ++r) {
             if (value == std::to_string(OutputWidths[r]) + "x" + std::to_string(OutputHeights[r])) {
                 v.output_res = r;
             }
@@ -187,15 +189,21 @@ void Load() {
         // This title keeps native guest targets. Never import another game's
         // resolution, camera layout, object-motion signatures or jitter policy.
         if (const char* output = std::getenv("PS4RT_OUTPUT_RES")) Set(v, "output_res", output);
-        v.output_res = std::clamp(v.output_res.load(), 1, OutputCount - 1);
+        // Older ini files: 1920x1080 (the old default) and other choices that do not fit the
+        // selected internal resolution become Native; fitting ones are kept.
+        {
+            const int r = std::clamp(v.render_resolution.load(), 0, int(Ps4RtGraphics::Resolutions.size()) - 1);
+            v.output_res = std::clamp(v.output_res.load(), 0, OutputCount - 1);
+            if (!OutputAllowed(Ps4RtGraphics::ResolutionWidths[r], Ps4RtGraphics::ResolutionHeights[r], v.output_res))
+                v.output_res = OutputNative;
+        }
         v.preset = NativeAA;
         SetSceneUpscaler(v.upscaler, false);
         v.temporal_problem = "FSR is waiting for a 3D scene; original rendering is active.";
     }
     // The internal resolution of this launch, when it is not the game's own. The menu shows it
-    // as the current choice, and the upscaler stays off for the launch (see internal_width).
+    // as the current choice; FSR reads the scene at that size (SceneSize).
     v.internal_width = v.internal_height = 0;
-    v.kept_upscaler = v.upscaler;
     if (const char* size = std::getenv("PS4RT_SO_RESOLUTION")) {
         unsigned w = 0, h = 0;
         char tail = 0;
@@ -204,7 +212,6 @@ void Load() {
             v.internal_width = int(w);
             v.internal_height = int(h);
             v.render_resolution = Ps4RtGraphics::ResolutionOfSize(int(w), int(h), v.render_resolution);
-            SetSceneUpscaler(UpscalerOff, false);
         }
     }
     v.startup_preset = v.preset;
@@ -319,14 +326,15 @@ void Save() {
                  "upscaler=%s\npreset=%d\nsharpen=%d\nsharpness=%.2f\njitter=%d\n"
                  "reactive=%d\nobject_motion=%d\nreactive_scale=%.2f\nreactive_threshold=%.2f\nreactive_max=%.2f\n"
                  "debug_view=%d\nshow_fps=%d\nfsr4_auto_exposure=%d\nfsr4_invert_jitter=%d\n",
-                 UpscalerName(v.internal_width ? v.kept_upscaler : v.upscaler.load()), v.preset.load(),
+                 UpscalerName(v.upscaler.load()), v.preset.load(),
                  int(v.sharpen.load()),
                  v.sharpness.load(), int(v.jitter.load()), int(v.reactive.load()),
                  int(v.object_motion.load()),
                  v.reactive_scale.load(), v.reactive_threshold.load(), v.reactive_max.load(),
                  v.debug_view.load(), int(v.show_fps.load()),
                  int(v.fsr4_auto_exposure.load()), int(v.fsr4_invert_jitter.load()));
-    std::fprintf(file, "output_res=%dx%d\n", OutputWidths[v.output_res], OutputHeights[v.output_res]);
+    if (v.output_res == OutputNative) std::fprintf(file, "output_res=native\n");
+    else std::fprintf(file, "output_res=%dx%d\n", OutputWidths[v.output_res], OutputHeights[v.output_res]);
     std::fprintf(file,
                  "overlay_fps=%d\noverlay_frametime=%d\noverlay_upscaler=%d\noverlay_gpu=%d\n"
                  "overlay_cpu=%d\noverlay_ram=%d\noverlay_vram=%d\noverlay_scale=%d\noverlay_corner=%d\n"
@@ -361,6 +369,38 @@ void Save() {
 float PresetScale(int preset) {
     static constexpr float scales[PresetCount] = {1.0f, 1.5f, 1.7f, 2.0f, 3.0f};
     return scales[std::clamp(preset, 0, PresetCount - 1)];
+}
+
+bool OutputAllowed(int iw, int ih, int output) {
+    if (output == OutputNative) return true;
+    if (output < 0 || output >= OutputCount || iw <= 0 || ih <= 0) return false;
+    const int ow = OutputWidths[output], oh = OutputHeights[output];
+    const double in = double(iw) / ih, out = double(ow) / oh;
+    // At most 3x per axis, FSR's supported range (Ultra Performance); 1280x720 to 4K is exactly 3x.
+    return ow > iw && oh > ih && ow <= 3 * iw && oh <= 3 * ih && std::abs(out - in) <= 0.01 * in;
+}
+
+void SceneSize(int& width, int& height) {
+    const auto& v = Get();
+    width = v.internal_width ? v.internal_width : 1920;
+    height = v.internal_width ? v.internal_height : 1080;
+}
+
+void GameDisplaySize(int& width, int& height) {
+    SceneSize(width, height);
+}
+
+void FsrOutputSize(int& width, int& height) {
+    int w, h;
+    SceneSize(w, h);
+    width = w;
+    height = h;
+    const int output = Get().output_res;
+    if (output == OutputNative || !OutputAllowed(w, h, output)) return;
+    // Fit inside the chosen size at the scene's aspect: 2560x1080 -> 3414x1440 (thin bars).
+    const double s = std::min(double(OutputWidths[output]) / w, double(OutputHeights[output]) / h);
+    width = std::min(OutputWidths[output], (int(w * s + 0.5) + 1) & ~1);
+    height = std::min(OutputHeights[output], (int(h * s + 0.5) + 1) & ~1);
 }
 
 const char* PresetName(int preset) {

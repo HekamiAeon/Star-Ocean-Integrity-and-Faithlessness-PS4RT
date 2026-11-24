@@ -449,6 +449,8 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
         attribute.attrib.pixel_format == Libraries::VideoOut::PixelFormat::A2R10G10B10Srgb;
     Ps4RtSettings::Get().image_width = int(image_size.width);
     Ps4RtSettings::Get().image_height = int(image_size.height);
+    Ps4RtSettings::Get().game_width = int(attribute.attrib.width);
+    Ps4RtSettings::Get().game_height = int(attribute.attrib.height);
     Ps4RtSettings::Get().window_width = int(frame->width);
     Ps4RtSettings::Get().window_height = int(frame->height);
     // Native-scene profiles sharpen at source resolution before ordinary display scaling.
@@ -865,19 +867,24 @@ Frame* Presenter::GetRenderFrame() {
 void Presenter::SetExpectedGameSize(s32 width, s32 height) {
     const auto& graphics = Ps4RtSettings::Get();
     if (graphics.CompactGraphicsMenu()) {
-        // At another internal resolution the upscaler is off and the game's image is shown at
-        // its own size; the window fits it. The output list is for the 1080p scene, and holds
-        // 16:9 sizes only: it would squeeze an image wider than 16:9.
-        if (const int image_width = graphics.image_width, image_height = graphics.image_height;
-            image_width > 0 && image_height > 0 &&
-            (graphics.internal_width != 0 || Ps4RtGraphics::WideImage(image_width, image_height))) {
-            expected_frame_width = image_width;
-            expected_frame_height = image_height;
-            return;
+        // FSR on: its output (the HUD is drawn at that size too). Off: the game's own display
+        // buffer at its size (the one last shown, which is 1920x1080 when the internal
+        // resolution could not be applied); the window fits it, nothing is enlarged here.
+        int w = 0, h = 0;
+        if (graphics.upscaler != Ps4RtSettings::UpscalerOff) {
+            Ps4RtSettings::FsrOutputSize(w, h);
+        } else if (graphics.game_width > 0 && graphics.game_height > 0) {
+            w = graphics.game_width;
+            h = graphics.game_height;
+        } else {
+            Ps4RtSettings::GameDisplaySize(w, h);
         }
-        const int output = std::clamp(graphics.output_res.load(),0,Ps4RtSettings::OutputCount-1);
-        expected_frame_width = Ps4RtSettings::OutputWidths[output];
-        expected_frame_height = Ps4RtSettings::OutputHeights[output];
+        // Never squeeze a wider game image into the frame: keep its aspect at the frame's height.
+        if (expected_ratio > float(w) / float(h) + 0.01f) w = s32(std::lround(h * expected_ratio)) & ~1;
+        // The present thread updates the size while the GPU thread reads it for its next frame:
+        // publish each value once, never an interim size.
+        expected_frame_width = u32(w);
+        expected_frame_height = u32(h);
         return;
     }
     if (width <= 0 || height <= 0) {

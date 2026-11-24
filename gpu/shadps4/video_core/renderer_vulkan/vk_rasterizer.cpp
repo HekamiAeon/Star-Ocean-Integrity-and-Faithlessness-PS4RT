@@ -63,6 +63,18 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
       pipeline_cache{instance, scheduler, liverpool, buffer_cache.GetSparsePageShift()},
       host_markers_enabled{EmulatorSettings.IsVkHostMarkersEnabled()},
       guest_markers_enabled{EmulatorSettings.IsVkGuestMarkersEnabled()} {
+    // The game's scene and frame sizes this run (the internal resolution); before any draw
+    // reads them.
+    {
+        int w, h;
+        Ps4RtSettings::SceneSize(w, h);
+        SceneResolution::game_scene = {u32(w), u32(h)};
+        Ps4RtSettings::GameDisplaySize(w, h);
+        SceneResolution::game_frame = {u32(w), u32(h)};
+        std::printf("Resolution: scene %ux%u, frame %ux%u\n", SceneResolution::game_scene.width,
+                    SceneResolution::game_scene.height, SceneResolution::game_frame.width,
+                    SceneResolution::game_frame.height);
+    }
     // Before the rasterizer is bound: Liverpool enqueues buffers only once it sees it.
     draw_prep = std::make_unique<DrawPreparation>(pipeline_cache);
     scene_targets = std::make_unique<SceneTargets>(instance, scheduler, runtime, texture_cache);
@@ -286,12 +298,12 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
         if (camera_motion->Enabled() && db_desc.first && cb_descs[0].first &&
             guest_targets == 1 && regs.depth_control.depth_enable &&
             regs.depth_control.depth_write_enable &&
-            UiComposition::NativeViewport(regs.viewports[0].xscale*2, regs.viewports[0].yscale*2)) {
+            UiComposition::SceneViewport(regs.viewports[0].xscale*2, regs.viewports[0].yscale*2)) {
             const auto& color = texture_cache.GetImage(cb_descs[0].first);
             const auto& depth = texture_cache.GetImage(db_desc.first);
-            gbuffer_draw = depth.info.size.width == 1920 && depth.info.size.height == 1080 &&
+            gbuffer_draw = SceneResolution::IsGameScene(depth.info.size.width, depth.info.size.height) &&
                 depth.info.pixel_format == vk::Format::eD32SfloatS8Uint &&
-                color.info.size.width == 1920 && color.info.size.height == 1080 &&
+                SceneResolution::IsGameScene(color.info.size.width, color.info.size.height) &&
                 (color.info.pixel_format == vk::Format::eR8G8B8A8Unorm ||
                  color.info.pixel_format == vk::Format::eB10G11R11UfloatPack32);
         }
@@ -1339,7 +1351,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         const auto& viewport = Regs().viewports[0];
         upscaler->OnDraw(pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash,
                          cb_descs[0].first, db_desc.first,
-                         UiComposition::NativeViewport(viewport.xscale * 2, viewport.yscale * 2),
+                         UiComposition::SceneViewport(viewport.xscale * 2, viewport.yscale * 2),
                          regs.blend_control[0].enable && !regs.color_buffers[0].info.blend_bypass,
                          pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash);
     }
@@ -1763,7 +1775,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
         const auto& viewport = regs.viewports[0];
         upscaler->OnDraw(pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash,
                          cb_descs[0].first, db_desc.first,
-                         UiComposition::NativeViewport(viewport.xscale * 2, viewport.yscale * 2),
+                         UiComposition::SceneViewport(viewport.xscale * 2, viewport.yscale * 2),
                          regs.blend_control[0].enable && !regs.color_buffers[0].info.blend_bypass,
                          pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash);
     }

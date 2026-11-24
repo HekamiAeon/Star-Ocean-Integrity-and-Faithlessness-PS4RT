@@ -113,8 +113,13 @@ TemporalUpscaler::TemporalUpscaler(const Instance& instance_, Scheduler& schedul
     // Explicit resolution overrides retain the old compatibility path. Normal presets
     // keep guest allocations/UI native and change only host raster targets at frame boundaries.
     scaled_session = std::getenv("PS4RT_RENDER_RES") && std::getenv("PS4RT_RENDER_RES")[0];
-    render_width = 1920;
-    render_height = 1080;
+    {
+        // The scene size this run: 1920x1080, or the internal resolution.
+        int sw = 1920, sh = 1080;
+        Ps4RtSettings::SceneSize(sw, sh);
+        render_width = u32(sw);
+        render_height = u32(sh);
+    }
     if (const char* res = std::getenv("PS4RT_RENDER_RES")) {
         u32 w = 0, h = 0;
         if (std::sscanf(res, "%ux%u", &w, &h) == 2 && w && h) {
@@ -236,12 +241,16 @@ bool TemporalUpscaler::OnFrameStart() {
     const bool active = Active();
     const bool jitter_on = active && settings.jitter && !Ps4RtToggle::Disabled(1u << 25);
     const int upscaler = settings.upscaler.load();
+    // FSR output: chosen in the menu, applied live (the presenter's frame and the HUD's host
+    // targets follow it); Native or a choice that does not fit is the scene size.
     const int output = settings.output_res.load();
     const bool output_changed = !scaled_session && applied_output != output;
     if (output_changed) {
-        target_width = Ps4RtSettings::OutputWidths[output];
-        target_height = Ps4RtSettings::OutputHeights[output];
-        std::printf("Output resolution: %ux%u (live)\n", target_width, target_height);
+        int ow = 1920, oh = 1080;
+        Ps4RtSettings::FsrOutputSize(ow, oh);
+        target_width = u32(ow);
+        target_height = u32(oh);
+        std::printf("FSR output: %ux%u (live)\n", target_width, target_height);
         failed = false;
         fsr4_failed = false;
     }
@@ -258,15 +267,18 @@ bool TemporalUpscaler::OnFrameStart() {
     // On GPUs without D32S8 blit support, UI depth is cleared instead of copied from scene.
     if (!scaled_session) {
         if (settings.CompactGraphicsMenu()) {
+            // The guest targets are the scene size (the internal resolution): no reduced
+            // proxies (SceneTargets stays at its native size), FSR reads them directly.
             auto size=camera_motion.RenderSize();
-            if (!size[0] || !size[1]) size={1920,1080};
-            scene_targets.SetSize({size[0],size[1]});
+            if (!size[0] || !size[1]) size={SceneResolution::game_scene.width,SceneResolution::game_scene.height};
+            render_width = size[0];
+            render_height = size[1];
         } else {
             scene_targets.SetSize(SceneResolution::ForPreset(active ? preset : 0,
                                                             {target_width,target_height}));
+            render_width = scene_targets.Size().width;
+            render_height = scene_targets.Size().height;
         }
-        render_width = scene_targets.Size().width;
-        render_height = scene_targets.Size().height;
     }
     Ps4RtSettings::Get().active_render_width = Scaled() ? render_width : scene_targets.Size().width;
     Ps4RtSettings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
@@ -1251,7 +1263,7 @@ void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
     if (Ps4RtSettings::Get().native_scene) {
         if (color && native_viewport && Ps4RtCamera::Tonemap(vs_hash,ps_hash)) {
             const auto& image = texture_cache.GetImage(color);
-            if (image.info.size.width == 1920 && image.info.size.height == 1080 &&
+            if (SceneResolution::IsGameScene(image.info.size.width, image.info.size.height) &&
                 image.info.pixel_format == vk::Format::eR8G8B8A8Unorm &&
                 !DisplayRegistry::IsDisplayBuffer(image.info.guest_address)) ldr_target = color;
         }
@@ -1759,7 +1771,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
     auto& display = displays[address];
     if (!display_redirect) {
         if (Ps4RtSettings::Get().native_scene && display.valid &&
-            image.info.size.width == 1920 && image.info.size.height == 1080 &&
+            SceneResolution::IsGameFrame(image.info.size.width, image.info.size.height) &&
             image.info.resources.levels == 1 && image.info.resources.layers == 1 &&
             image.backing->num_samples == 1 && display.format == image.info.pixel_format &&
             (display.format == vk::Format::eR8G8B8A8Unorm ||
@@ -1772,8 +1784,8 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
             // before the game's draw/clear, so genuine black/fade writes win.
             runtime.FlushBarriers();
             CopyDisplayForRendering(scheduler, vk::Image(display.image),
-                {display.width, display.height}, image.GetImage(), {1920,1080},
-                image.backing->state.layout);
+                {display.width, display.height}, image.GetImage(),
+                {image.info.size.width, image.info.size.height}, image.backing->state.layout);
         }
         display.valid = false; // not upscaled: the presenter shows the guest buffer
         return false;
@@ -1901,8 +1913,8 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
         const auto& guest = texture_cache.GetImage(image).info;
         std::scoped_lock lock{display_mutex};
         const auto it = displays.find(guest.guest_address);
-        if (it != displays.end() && it->second.valid && guest.size.width == 1920 &&
-            guest.size.height == 1080 && guest.num_samples == 1) {
+        if (it != displays.end() && it->second.valid &&
+            SceneResolution::IsGameFrame(guest.size.width, guest.size.height) && guest.num_samples == 1) {
             auto& display = it->second;
             const auto family = [](vk::Format format) {
                 if (format == vk::Format::eR8G8B8A8Unorm || format == vk::Format::eR8G8B8A8Srgb) return 1;
@@ -1918,13 +1930,14 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
                     display.sampled_image = VideoCore::UniqueImage(instance.GetDevice(), instance.GetAllocator());
                     display.sampled_image.Create({.flags = vk::ImageCreateFlagBits::eMutableFormat,
                         .imageType = vk::ImageType::e2D, .format = display.format,
-                        .extent = {1920,1080,1}, .mipLevels = 1, .arrayLayers = 1,
+                        .extent = {guest.size.width, guest.size.height, 1}, .mipLevels = 1, .arrayLayers = 1,
                         .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
                         .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled |
                                  vk::ImageUsageFlagBits::eColorAttachment});
                 }
                 CopyDisplayForSampling(scheduler, vk::Image(display.image), {display.width,display.height},
-                    vk::Image(display.sampled_image), {1920,1080}, display.sampled_initialized);
+                    vk::Image(display.sampled_image), {guest.size.width, guest.size.height},
+                    display.sampled_initialized);
                 display.sampled_initialized = true;
                 view = Mirror(vk::Image(display.sampled_image), display.sampled_views, info.format, info.mapping);
                 layout = vk::ImageLayout::eGeneral;
