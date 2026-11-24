@@ -35,6 +35,10 @@ bool IsOverwrittenPoolImage(bool gpu_modified, bool cpu_dirty, bool in_use) {
     return gpu_modified && cpu_dirty && !in_use;
 }
 
+bool CanHoldTarget(bool target_request, bool gpu_modified, bool cpu_dirty, bool in_use) {
+    return !target_request || !IsOverwrittenPoolImage(gpu_modified, cpu_dirty, in_use);
+}
+
 bool CanBeStencilPlane(const ImageInfo& image) {
     return !image.props.is_depth;
 }

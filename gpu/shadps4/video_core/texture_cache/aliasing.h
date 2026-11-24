@@ -26,6 +26,15 @@ struct ImageInfo;
 // parent of a render target placed inside its range.
 [[nodiscard]] bool IsOverwrittenPoolImage(bool gpu_modified, bool cpu_dirty, bool in_use);
 
+// A render target placed inside a cached image is drawn into it, as one of its slices or mips,
+// but not into an overwritten GPU image (IsOverwrittenPoolImage): that memory holds other data.
+// A draw looks up its targets before its textures. Star Ocean draws the first face of a rebuilt
+// environment cube four faces into the old cube, in the same draw that reads the compressed
+// cube its loader wrote over the old one's start, so the pool-reuse rule met the old cube as
+// that draw's target and kept it: three faces of the new cube were never drawn.
+[[nodiscard]] bool CanHoldTarget(bool target_request, bool gpu_modified, bool cpu_dirty,
+                                 bool in_use);
+
 // A depth target's stencil plane is linked to the image cached at its stencil address, so that
 // reads of that image go to the target's stencil. The guest can also put a depth image of its
 // own in that memory at another time: Star Ocean's one-tile sun shadow map sits where the

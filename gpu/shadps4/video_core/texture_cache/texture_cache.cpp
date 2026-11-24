@@ -921,6 +921,16 @@ std::tuple<ImageId, int, int> TextureCache::ResolveOverlap(const ImageInfo& imag
     if (image_info.guest_address > cache_image.info.guest_address) {
         if (auto mip = image_info.MipOf(cache_image.info); mip >= 0) {
             if (auto slice = image_info.SliceOf(cache_image.info, mip); slice >= 0) {
+                // Not a slice of an image the guest has overwritten (CanHoldTarget): freed,
+                // the target gets an image of its own.
+                if (!CanHoldTarget(binding == BindingType::RenderTarget ||
+                                       binding == BindingType::DepthTarget,
+                                   True(cache_image.flags & ImageFlagBits::GpuModified),
+                                   True(cache_image.flags & ImageFlagBits::CpuDirty),
+                                   cache_image.binding.is_bound || cache_image.binding.is_target)) {
+                    FreeImage(cache_image_id);
+                    return {{}, -1, -1};
+                }
                 return {cache_image_id, mip, slice};
             }
         }

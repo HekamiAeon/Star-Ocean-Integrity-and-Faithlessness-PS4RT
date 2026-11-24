@@ -90,6 +90,17 @@ int main() {
     assert(three_faces.guest_size == 0x18000);
     assert(three_faces.MipOf(old_cube) != 0 || three_faces.SliceOf(old_cube, 0) < 0);
 
+    // The draw of that first face looks up its target before it binds the loaded cube, so
+    // the pool-reuse rule above meets the old cube as the draw's target and keeps it. At the
+    // target lookup the old cube is not in use yet (logged: drawn, then written by the loader);
+    // it cannot hold the face. A texture read inside it, an image in use, and one whose GPU
+    // content is still current keep the slice rule.
+    assert(!CanHoldTarget(true, true, true, false));
+    assert(CanHoldTarget(false, true, true, false));
+    assert(CanHoldTarget(true, true, true, true));
+    assert(CanHoldTarget(true, true, false, false));
+    assert(CanHoldTarget(true, false, true, false));
+
     // The three-tile shadow map keeps its stencil where the one-tile map, used at
     // other times, keeps its depth (addresses from the game).
     const auto three_tiles = ShadowMap(0x11164e8000, 0x10de498000, 3);
@@ -111,5 +122,6 @@ int main() {
     assert(CanBeStencilPlane(stencil_texture));
 
     std::puts("PASS: overwritten GPU image at pool reuse");
+    std::puts("PASS: a render target is never placed inside an overwritten GPU image");
     std::puts("PASS: a depth image at another target's stencil address stays its own image");
 }
