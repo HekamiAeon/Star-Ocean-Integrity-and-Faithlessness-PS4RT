@@ -772,7 +772,11 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
         if (found != graphics_pipelines.end()) {
             return found->second.get();
         }
-        if (!pending_graphics.contains(sel.graphics_key) && compiler->HasCapacity()) {
+        // ps4rt: one saved by an earlier session restores from its binary in well under a
+        // millisecond: built below at once, its draw neither skipped nor queued.
+        const bool saved =
+            saved_graphics.Contains(std::hash<GraphicsPipelineKey>{}(sel.graphics_key));
+        if (!saved && !pending_graphics.contains(sel.graphics_key) && compiler->HasCapacity()) {
             PhaseTimer capture{g_ps4rt_snapshot_ns};
             auto build = std::make_shared<AsyncGraphicsCompilation>();
             build->selection = sel;
@@ -802,7 +806,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
                 pending_graphics.emplace(sel.graphics_key, std::move(build));
             }
         }
-        if (skip_pending) { // queued, or the queue is full: tried again next frame
+        if (!saved && skip_pending) { // queued, or the queue is full: tried again next frame
             ++g_ps4rt_pending_draws;
             return nullptr;
         }
@@ -816,12 +820,15 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             const auto ready = graphics_pipelines.find(sel.graphics_key);
             return ready != graphics_pipelines.end() ? ready->second.get() : nullptr;
         }
-        // No job was accepted (for example, queue capacity): build this pipeline below.
+        // A saved pipeline, or no job was accepted (for example, queue capacity): build this
+        // pipeline below.
     }
     const auto [it, is_new] = graphics_pipelines.try_emplace(sel.graphics_key);
     if (is_new) {
         const auto pipeline_hash = std::hash<GraphicsPipelineKey>{}(sel.graphics_key);
-        LOG_INFO(Render_Vulkan, "Compiling graphics pipeline {:#x}", pipeline_hash);
+        const bool saved = saved_graphics.Contains(pipeline_hash);
+        LOG_INFO(Render_Vulkan, "{} graphics pipeline {:#x}", saved ? "Restoring saved" : "Compiling",
+                 pipeline_hash);
         CompileTimer timer;
 
         GraphicsPipeline::SerializationSupport sdata{};
@@ -829,7 +836,9 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             instance, scheduler, desc_heap, profile, sel.graphics_key, *pipeline_cache, sel.infos,
             sel.runtime_infos, sel.fetch_shader, sel.modules, sdata, false);
 
-        RegisterPipelineData(sel.graphics_key, pipeline_hash, sdata);
+        if (!saved) { // its key is on disk already
+            RegisterPipelineData(sel.graphics_key, pipeline_hash, sdata);
+        }
         ++num_new_pipelines;
 
         if (EmulatorSettings.IsShaderCollect()) {

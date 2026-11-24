@@ -258,6 +258,33 @@ size_t DataBase::CountBlobs(BlobType type) {
     return count;
 }
 
+void DataBase::ForEachBlobName(BlobType type,
+                               const std::function<void(std::string_view name)>& func) {
+    if (!opened) {
+        return;
+    }
+    const auto& ext = "." + GetBlobFileExtension(type);
+    const auto visit = [&](std::string_view file_name) {
+        if (file_name.ends_with(ext)) {
+            func(file_name.substr(0, file_name.size() - ext.size()));
+        }
+    };
+    if (EmulatorSettings.IsPipelineCacheArchived()) {
+        const auto num_files = mz_zip_reader_get_num_files(&zip_ar);
+        for (int index = 0; index < num_files; ++index) {
+            std::array<char, MZ_ZIP_MAX_ARCHIVE_FILENAME_SIZE> file_name{};
+            mz_zip_reader_get_filename(&zip_ar, index, file_name.data(), file_name.size());
+            visit(file_name.data());
+        }
+        return;
+    }
+    std::error_code error;
+    for (std::filesystem::directory_iterator files{cache_path, error}, end; !error && files != end;
+         files.increment(error)) {
+        visit(files->path().filename().string());
+    }
+}
+
 bool DataBase::ConcurrentReads() const {
     return !EmulatorSettings.IsPipelineCacheArchived();
 }

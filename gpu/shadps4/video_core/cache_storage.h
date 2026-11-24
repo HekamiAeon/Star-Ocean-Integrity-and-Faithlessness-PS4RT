@@ -8,6 +8,7 @@
 #include "common/types.h"
 
 #include <functional>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -49,6 +50,8 @@ public:
     [[nodiscard]] bool ConcurrentReads() const;
     /// ps4rt: number of blobs ForEachBlob visits (the loading screen's total).
     size_t CountBlobs(BlobType type);
+    /// ps4rt: the name of each blob of `type`, without its extension; nothing is read.
+    void ForEachBlobName(BlobType type, const std::function<void(std::string_view name)>& func);
 
 private:
     std::jthread io_worker{};

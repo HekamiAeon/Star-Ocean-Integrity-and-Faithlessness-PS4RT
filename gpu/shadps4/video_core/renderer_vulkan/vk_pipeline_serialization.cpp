@@ -1081,9 +1081,15 @@ void PipelineCache::WarmUp(const std::function<void(u32, u32)>& progress) {
 }
 
 void PipelineCache::StartOnDemand() {
-    CheckCacheProfile();
+    // ps4rt: the pipelines of earlier sessions, restored from their binaries when first used
+    // (vk_saved_pipelines.h). Only with the binary cache: other setups compile them again.
+    if (CheckCacheProfile() && instance.GetPipelineBinaryGlobalKey().keySize) {
+        Storage::DataBase::Instance().ForEachBlobName(
+            Storage::BlobType::PipelineKey, [this](std::string_view name) { saved_graphics.Add(name); });
+    }
     Storage::DataBase::Instance().FinishPreload();
-    std::printf("Pipeline startup: on demand, no bulk warm-up\n");
+    std::printf("Pipeline startup: on demand, no bulk warm-up (%zu saved pipelines)\n",
+                saved_graphics.Size());
 }
 
 // ps4rt: one cached shader stage read by the background warm-up, shared by every cached

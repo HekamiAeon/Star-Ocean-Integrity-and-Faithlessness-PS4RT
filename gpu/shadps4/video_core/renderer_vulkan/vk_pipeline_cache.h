@@ -17,6 +17,7 @@
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
 #include "video_core/renderer_vulkan/vk_async_compiler.h"
 #include "video_core/renderer_vulkan/vk_repeated_targets.h"
+#include "video_core/renderer_vulkan/vk_saved_pipelines.h"
 
 template <>
 struct std::hash<vk::ShaderModule> {
@@ -246,6 +247,9 @@ private:
     tsl::robin_map<GraphicsPipelineKey, std::unique_ptr<GraphicsPipeline>> graphics_pipelines;
     PipelineSelection sel{}; ///< GPU thread selection state
     RepeatedTargets repeated_targets; ///< GPU thread: see DrawTargetsRepeat
+    /// Pipelines earlier sessions saved with their driver binaries (StartOnDemand): built at
+    /// once when a draw first needs them, see vk_saved_pipelines.h.
+    SavedPipelines saved_graphics;
     ComputePipelineKey compute_key{};
     u32 num_new_pipelines{}; // new pipelines added to the cache since the game start
 
