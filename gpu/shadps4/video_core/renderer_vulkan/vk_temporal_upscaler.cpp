@@ -226,7 +226,7 @@ bool TemporalUpscaler::OnFrameStart() {
             if (fields == 3 && provider >= 0 && provider < Ps4RtSettings::UpscalerCount) {
                 if (Ps4RtSettings::Get().CompactGraphicsMenu()) {
                     if (Ps4RtSettings::Get().upscaler != provider)
-                        Ps4RtSettings::SetSceneUpscaler(provider, false);
+                        Ps4RtSettings::SetSceneUpscaler(provider, Ps4RtSettings::SceneObjectMotion);
                 }
                 else Ps4RtSettings::Get().upscaler.store(provider);
             }

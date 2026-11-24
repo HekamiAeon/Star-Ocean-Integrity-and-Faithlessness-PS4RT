@@ -1500,7 +1500,14 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     push_data.xoffset *= target_scale[0];
     push_data.yscale *= target_scale[1];
     push_data.yoffset *= target_scale[1];
-    if (motion_draw && motion_geometry) {
+    // A motion pipeline without a recorded draw stores and loads nothing (vectors invalid).
+    push_data.motion_param = 0;
+    // ps4rt: in native-scene titles the pipeline rule also admits other scene-size passes
+    // (minimap and effect quads with their own depth); only draws into the scene depth, the
+    // jittered ones, keep vertex history.
+    const bool motion_recorded = !Ps4RtSettings::Get().native_scene ||
+        (db_desc.first && db_desc.first == camera_motion->Depth());
+    if (motion_draw && motion_geometry && motion_recorded) {
         const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
         const auto [base_vertex, first_instance] =
             GetDrawOffsets(regs, vs, pipeline->GetFetchShader());
@@ -1536,7 +1543,6 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                                                palette);
             }
         }
-        push_data.motion_param = 0;
         if (!gated || object_motion->Moving({.shader = vs.pgm_hash,
                                              .geometry = motion_geometry,
                                              .indices = index_address,

@@ -35,6 +35,7 @@
 #include "video_core/renderer_vulkan/vk_pipeline_serialization.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
+#include "video_core/renderer_vulkan/ui_composition.h"
 
 namespace Vulkan {
 
@@ -806,12 +807,33 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
                 pending_graphics.emplace(sel.graphics_key, std::move(build));
             }
         }
-        if (!saved && skip_pending) { // queued, or the queue is full: tried again next frame
+        // ps4rt: a motion variant built for the first time: until it is ready the draw uses
+        // its ordinary pipeline if that one exists or was saved (camera motion only for these
+        // frames), so a draw an earlier session had ready is neither skipped nor waited for.
+        bool plain_saved = false;
+        if (!saved && sel.graphics_key.motion_vectors && !sel.worker) {
+            const PipelineSelection motion_sel = sel;
+            sel.no_motion = true;
+            const bool plain = RefreshGraphicsKey(sel);
+            sel.no_motion = false;
+            if (plain && !sel.graphics_key.motion_vectors) {
+                const auto built = graphics_pipelines.find(sel.graphics_key);
+                if (built != graphics_pipelines.end()) {
+                    return built->second.get();
+                }
+                plain_saved =
+                    saved_graphics.Contains(std::hash<GraphicsPipelineKey>{}(sel.graphics_key));
+            }
+            if (!plain_saved) {
+                sel = motion_sel;
+            }
+        }
+        if (!saved && !plain_saved && skip_pending) { // queued, or the queue is full: tried again next frame
             ++g_ps4rt_pending_draws;
             return nullptr;
         }
         if (const auto pending = pending_graphics.find(sel.graphics_key);
-            pending != pending_graphics.end()) {
+            !plain_saved && pending != pending_graphics.end()) {
             {
                 PhaseTimer waiting{g_ps4rt_compile_wait_ns};
                 pending->second->job.Wait();
@@ -923,8 +945,15 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
         for (s32 cb = 0; cb < AmdGpu::NUM_COLOR_BUFFERS && !skip_cb_binding; ++cb) {
             bound += (regs.color_buffers[cb] && regs.color_target_mask.GetMask(cb)) ? 1 : 0;
         }
-        const bool geometry_targets = bound >= 5;
-        motion_possible = sel.motion_requested && Shader::MotionVectors::positions_address != 0 && geometry_targets &&
+        // Native-scene titles draw the scene forward: one colour target, the scene depth
+        // written, a viewport covering the scene (the rasterizer's scene-pass test). Only
+        // draws into the scene depth then record history (vk_rasterizer.cpp).
+        const bool forward_scene = Ps4RtSettings::Get().native_scene && bound == 1 &&
+            regs.depth_control.depth_enable && regs.depth_control.depth_write_enable &&
+            UiComposition::SceneViewport(regs.viewports[0].xscale * 2, regs.viewports[0].yscale * 2);
+        const bool geometry_targets = bound >= 5 || forward_scene;
+        motion_possible = !sel.no_motion && sel.motion_requested &&
+                          Shader::MotionVectors::positions_address != 0 && geometry_targets &&
                           !regs.color_buffers[Shader::MotionVectors::Output] &&
                           regs.depth_buffer.DepthValid() &&
                           regs.depth_buffer.NumSamples() == 1 && !regs.IsClipDisabled() &&
@@ -1002,7 +1031,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
             sel.motion = true;
         }
         if (sel.motion && !RefreshGraphicsStages(sel)) {
-            return false;
+            // ps4rt: motion vertex shaders hold this session's buffer addresses, so every
+            // session translates them again. Until one is ready the draw keeps its ordinary
+            // stages (camera motion only for a frame or two) instead of being skipped.
+            if (!sel.compilation_pending || sel.worker || sel.require_complete) {
+                return false;
+            }
+            sel.motion = false;
+            if (!RefreshGraphicsStages(sel)) {
+                return false;
+            }
         }
     }
 

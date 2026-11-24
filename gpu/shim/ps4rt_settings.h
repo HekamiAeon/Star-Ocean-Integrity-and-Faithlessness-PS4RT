@@ -139,6 +139,9 @@ Values& Get();
 void Load();
 /// Native-scene provider transition; future ports adapt motion inputs as needed.
 void SetSceneUpscaler(int selected, bool object_motion);
+/// Per-character motion vectors with the temporal upscalers (vertex history of the scene's
+/// depth-writing draws). With camera motion only, FSR 3.1 trails moving characters.
+constexpr bool SceneObjectMotion = true;
 /// Checks the loaded choice before the first frame; unsupported FSR 4 uses FSR 3.1.
 void ConfigureUpscalerSupport(bool fsr4, bool fsr411);
 /// After device creation: DLSS availability; a DLSS setting falls back to FSR 3.1 without it.

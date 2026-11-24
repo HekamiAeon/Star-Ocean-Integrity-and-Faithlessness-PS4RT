@@ -52,7 +52,7 @@ int main() {
             s.sharpness = 0.42f;
             s.anisotropy = 16;
             s.output_res = output;
-            SetSceneUpscaler(provider, false);
+            SetSceneUpscaler(provider, SceneObjectMotion);
             Save();
             Load();
             assert(s.upscaler == provider && s.startup_upscaler == provider);
@@ -60,11 +60,19 @@ int main() {
             assert(s.render_resolution == 1 && s.startup_render_resolution == 1);
             assert(s.sharpness > 0.419f && s.sharpness < 0.421f);
             assert(s.anisotropy == 16 && s.startup_anisotropy == 16);
-            assert(!s.object_motion && !s.fsr1 && !s.spatial_aa);
+            // Per-character motion goes with the temporal upscalers (FSR 3.1 trails characters
+            // with camera motion only).
+            assert(s.object_motion == (provider != UpscalerOff) && !s.fsr1 && !s.spatial_aa);
             assert(s.jitter == (provider != UpscalerOff));
             assert(s.rcas == (provider == UpscalerOff));
         }
     }
+    // The launcher starts every title with PS4RT_OBJECT_MOTION=0; this port's upscaler choice
+    // still decides.
+    setenv("PS4RT_OBJECT_MOTION", "0", 1);
+    Load();
+    assert(s.upscaler == UpscalerFsr4 && s.object_motion && s.jitter);
+    unsetenv("PS4RT_OBJECT_MOTION");
     setenv("PS4RT_UPSCALER", "off", 1);
     setenv("PS4RT_OUTPUT_RES", "1920x1080", 1);
     Load();
@@ -72,7 +80,7 @@ int main() {
     unsetenv("PS4RT_UPSCALER");
     unsetenv("PS4RT_OUTPUT_RES");
     Load();
-    assert(!s.object_motion && s.temporal_problem);
+    assert(s.upscaler == UpscalerFsr4 && s.object_motion && s.temporal_problem);
 
     // FSR output choices follow the internal resolution (the Sakura Wars port's rules): larger in
     // both dimensions, at most 3x and the same aspect; Native (AA only) always.

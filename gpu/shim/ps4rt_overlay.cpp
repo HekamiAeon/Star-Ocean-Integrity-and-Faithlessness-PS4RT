@@ -457,7 +457,7 @@ void CompactGraphics() {
         ChoiceRow("Upscaling / anti-aliasing", provider, providers, provider_values,
                   s.fsr4_supported ? 3 : 2, upscaler_help.c_str());
         if (provider != s.upscaler)
-            Ps4RtSettings::SetSceneUpscaler(provider, false);
+            Ps4RtSettings::SetSceneUpscaler(provider, Ps4RtSettings::SceneObjectMotion);
         const bool temporal = s.upscaler != Ps4RtSettings::UpscalerOff;
         static const char* const anisotropy_labels[] = {"Game default", "2x", "4x", "8x", "16x"};
         ChoiceRow("Anisotropic filtering", s.anisotropy, anisotropy_labels,

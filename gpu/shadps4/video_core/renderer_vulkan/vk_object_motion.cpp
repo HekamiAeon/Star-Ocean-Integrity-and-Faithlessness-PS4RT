@@ -54,11 +54,20 @@ ObjectMotion::ObjectMotion(const Instance& instance_, Scheduler& scheduler_)
     // Pipeline selection limits the extra attachment and vertex stores to likely
     // animated draws. A setting or environment override can still disable the path.
     // Allocate motion resources only when the native port requests them.
-    if (!Ps4RtSettings::Get().object_motion ||
-        Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerOff) {
-        std::puts("Object motion: off (enable in menu or PS4RT_OBJECT_MOTION=1)");
+    if (!Requested()) {
+        std::puts("Object motion: off until a temporal upscaler is selected");
         return;
     }
+    Allocate();
+}
+
+bool ObjectMotion::Requested() noexcept {
+    const auto& settings = Ps4RtSettings::Get();
+    return settings.object_motion && settings.upscaler != Ps4RtSettings::UpscalerOff;
+}
+
+void ObjectMotion::Allocate() {
+    allocated = true;
     const auto& features = instance.GetPhysicalDevice().getFeatures();
     if (!features.vertexPipelineStoresAndAtomics) {
         std::printf("Object motion: vertexPipelineStoresAndAtomics unsupported, off\n");
@@ -83,8 +92,7 @@ ObjectMotion::ObjectMotion(const Instance& instance_, Scheduler& scheduler_)
 }
 
 bool ObjectMotion::Enabled() const noexcept {
-    const auto& settings = Ps4RtSettings::Get();
-    return enabled && settings.object_motion && settings.upscaler != Ps4RtSettings::UpscalerOff;
+    return enabled && Requested();
 }
 
 ObjectMotion::~ObjectMotion() {
@@ -99,11 +107,21 @@ ObjectMotion::~ObjectMotion() {
 }
 
 void ObjectMotion::OnFrameStart() {
+    // A temporal upscaler selected in the menu after starting without one (render thread,
+    // before this frame's pipelines are chosen).
+    if (!allocated && Requested()) {
+        Allocate();
+    }
     if (!Enabled()) {
         written = false;
+        paused = true;
         return;
     }
-    
+    if (paused) {
+        // History from before the pause belongs to an old frame, not the previous one.
+        InvalidateHistory();
+        paused = false;
+    }
     history.NextFrame();
     ++frame;
     if (frame % Motion::IndexRangeCache::Unused == 0) {

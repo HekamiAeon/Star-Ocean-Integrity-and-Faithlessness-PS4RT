@@ -103,6 +103,7 @@ struct PipelineSelection {
     GraphicsPipelineKey graphics_key{};
     bool motion = false;
     bool motion_requested = false; ///< settings snapshot for prepared-pipeline validation
+    bool no_motion = false;        ///< select the ordinary variant (a motion one is not ready)
     bool compilation_pending = false;
     // An executing draw must finish selection even if background compilation is busy.
     bool require_complete = false;

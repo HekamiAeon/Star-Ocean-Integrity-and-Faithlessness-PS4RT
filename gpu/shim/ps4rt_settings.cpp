@@ -198,7 +198,7 @@ void Load() {
                 v.output_res = OutputNative;
         }
         v.preset = NativeAA;
-        SetSceneUpscaler(v.upscaler, false);
+        SetSceneUpscaler(v.upscaler, SceneObjectMotion);
         v.temporal_problem = "FSR is waiting for a 3D scene; original rendering is active.";
     }
     // The internal resolution of this launch, when it is not the game's own. The menu shows it

@@ -60,11 +60,17 @@ public:
     }
 
 private:
+    /// The settings ask for object motion (a temporal upscaler with object_motion on).
+    [[nodiscard]] static bool Requested() noexcept;
+    /// Parameter and position buffers (once; `enabled` when they exist).
+    void Allocate();
     void EnsureImage(u32 width, u32 height);
 
     const Instance& instance;
     Scheduler& scheduler;
     bool enabled = false;
+    bool allocated = false; ///< Allocate ran (it may have failed)
+    bool paused = false;    ///< disabled since the last recorded frame
 
     // Parameter ring (host visible): FrameSlots frames of ParamsPerFrame entries (two u32x4),
     // element 0 all zero (motion off).
