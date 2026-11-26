@@ -289,6 +289,7 @@ bool TemporalUpscaler::OnFrameStart() {
     applied_upscaler = upscaler;
     last_active = active;
     last_jitter = jitter_on;
+    const bool resolved_last_frame = dispatched_last_frame;
     dispatched_last_frame = false;
 
     // The display pass of an upscaled frame reads the upscaled UI image.
@@ -301,8 +302,11 @@ bool TemporalUpscaler::OnFrameStart() {
     snapshot_taken = false;
     opaque_valid = false;
     mask_ready = false;
-    // Halton(2, 3); the menu or toggle 1 << 25 disables it.
-    if (!jitter_on) {
+    // Halton(2, 3); the menu or toggle 1 << 25 disables it. Only frames the upscaler resolves
+    // are jittered: where it leaves a frame to the original rendering (no scene camera, as on
+    // the title screen) the jitter would be shown as a vibrating picture. A scene therefore
+    // starts with one frame that is not jittered.
+    if (!jitter_on || !resolved_last_frame) {
         jitter = {};
         return changed;
     }
