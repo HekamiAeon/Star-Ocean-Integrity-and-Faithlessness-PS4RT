@@ -44,6 +44,11 @@ int main() {
     }
     assert(saved.Size() == 1);
     assert(saved.Contains(0x00000ffef04f2d59ull) && !saved.Contains(0xaaull));
+    // One the driver has no binary for any more is treated as never seen.
+    saved.Forget(0xaaull);
+    assert(saved.Size() == 1);
+    saved.Forget(0x00000ffef04f2d59ull);
+    assert(saved.Size() == 0 && !saved.Contains(0x00000ffef04f2d59ull));
     std::puts("saved pipelines: ok");
     return 0;
 }

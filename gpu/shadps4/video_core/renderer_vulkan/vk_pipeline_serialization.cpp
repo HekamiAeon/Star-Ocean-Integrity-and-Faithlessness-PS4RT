@@ -274,7 +274,7 @@ void ReportPipelineBinaryCache() {
 vk::ResultValue<vk::UniquePipeline> CreateCachedGraphicsPipeline(
     vk::Device device, vk::PipelineCache cache, const vk::GraphicsPipelineCreateInfo& info,
     const GraphicsPipelineKey& key, const vk::PipelineBinaryKeyKHR& global_key,
-    const std::filesystem::path& directory) {
+    const std::filesystem::path& directory, bool restore_only) {
     using namespace PipelineBinaryCache;
     const auto& dispatch = VULKAN_HPP_DEFAULT_DISPATCHER;
     const bool enabled = global_key.keySize && EmulatorSettings.IsPipelineCacheEnabled();
@@ -292,12 +292,19 @@ vk::ResultValue<vk::UniquePipeline> CreateCachedGraphicsPipeline(
         }
         return result;
     };
+    // ps4rt: restore_only never compiles: without a stored binary the driver accepts, the
+    // caller gets ePipelineCompileRequired and builds the pipeline in the background.
+    const auto not_restored = [] {
+        return vk::ResultValue<vk::UniquePipeline>{vk::Result::ePipelineCompileRequired,
+                                                   vk::UniquePipeline{}};
+    };
     if (!enabled) {
-        return create(cache, info, false);
+        return restore_only ? not_restored() : create(cache, info, false);
     }
+    const auto counted = binary_hits.load() + binary_misses.load();
     SCOPE_EXIT {
         const auto count = binary_hits.load() + binary_misses.load();
-        if (count && count % 256 == 0) {
+        if (count != counted && count % 256 == 0) {
             ReportPipelineBinaryCache();
         }
     };
@@ -316,6 +323,9 @@ vk::ResultValue<vk::UniquePipeline> CreateCachedGraphicsPipeline(
     binary_key_ns += ElapsedNs(key_started);
     if (key_result != vk::Result::eSuccess ||
         !ValidKey(global) || !ValidKey(BinaryKey(pipeline_key))) {
+        if (restore_only) {
+            return not_restored();
+        }
         ++binary_errors;
         ++binary_misses;
         return create(cache, info, false);
@@ -391,6 +401,9 @@ vk::ResultValue<vk::UniquePipeline> CreateCachedGraphicsPipeline(
     } catch (const std::exception&) {
         ++binary_errors;
         destroy();
+    }
+    if (restore_only) {
+        return not_restored();
     }
     ++binary_misses;
     flags.flags = vk::PipelineCreateFlags2{static_cast<VkPipelineCreateFlags>(info.flags)} |

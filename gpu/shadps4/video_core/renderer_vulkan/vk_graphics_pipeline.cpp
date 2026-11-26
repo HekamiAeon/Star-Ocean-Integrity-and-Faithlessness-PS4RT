@@ -49,7 +49,8 @@ GraphicsPipeline::GraphicsPipeline(
     vk::PipelineCache pipeline_cache, std::span<const Shader::Info*, MaxShaderStages> infos,
     std::span<const Shader::RuntimeInfo, MaxShaderStages> runtime_infos,
     std::optional<const Shader::Gcn::FetchShaderData> fetch_shader_,
-    std::span<const vk::ShaderModule> modules, SerializationSupport& sdata, bool preloading)
+    std::span<const vk::ShaderModule> modules, SerializationSupport& sdata, bool preloading,
+    bool restore_only)
     : Pipeline{instance, scheduler, desc_heap, profile, pipeline_cache}, key{key_},
       fetch_shader{std::move(fetch_shader_)} {
     const auto started = Clock::now();
@@ -434,7 +435,11 @@ GraphicsPipeline::GraphicsPipeline(
         Common::ElfInfo::Instance().GameSerial() / "pipeline-binaries";
     auto [pipeline_result, pipe] =
         CreateCachedGraphicsPipeline(device, pipeline_cache, pipeline_info, key,
-                                     instance.GetPipelineBinaryGlobalKey(), binary_directory);
+                                     instance.GetPipelineBinaryGlobalKey(), binary_directory,
+                                     restore_only);
+    if (restore_only && pipeline_result == vk::Result::ePipelineCompileRequired) {
+        return; // ps4rt: no stored binary: Restored() is false
+    }
     ASSERT_MSG(pipeline_result == vk::Result::eSuccess, "Failed to create graphics pipeline: {}",
                vk::to_string(pipeline_result));
     pipeline = std::move(pipe);
@@ -449,7 +454,12 @@ GraphicsPipeline::GraphicsPipeline(
         square_info.pColorBlendState = &square_blending;
         auto [square_result, square] =
             CreateCachedGraphicsPipeline(device, pipeline_cache, square_info, key,
-                                         instance.GetPipelineBinaryGlobalKey(), binary_directory);
+                                         instance.GetPipelineBinaryGlobalKey(), binary_directory,
+                                         restore_only);
+        if (restore_only && square_result == vk::Result::ePipelineCompileRequired) {
+            pipeline.reset();
+            return;
+        }
         ASSERT_MSG(square_result == vk::Result::eSuccess,
                    "Failed to create the squaring pipeline: {}", vk::to_string(square_result));
         square_pipeline = std::move(square);

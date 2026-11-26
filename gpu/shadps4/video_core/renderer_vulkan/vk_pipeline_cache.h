@@ -201,6 +201,11 @@ private:
     bool AsyncCompilation() const;
     bool RefreshGraphicsKey(PipelineSelection& sel);
     bool DrawTargetsRepeat();
+    /// ps4rt: the pipeline of sel.graphics_key from the binary the driver stored in an earlier
+    /// session. Null if it was not saved, or the driver has no binary for it any more (another
+    /// driver version, a shader translated differently): the key is then forgotten, and the
+    /// pipeline is built in the background like one never seen instead of compiled on the spot.
+    const GraphicsPipeline* RestoreSaved();
     bool RefreshGraphicsStages(PipelineSelection& sel);
     bool RefreshComputeKey();
 

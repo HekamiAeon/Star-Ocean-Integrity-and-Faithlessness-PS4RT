@@ -774,10 +774,11 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             return found->second.get();
         }
         // ps4rt: one saved by an earlier session restores from its binary in well under a
-        // millisecond: built below at once, its draw neither skipped nor queued.
-        const bool saved =
-            saved_graphics.Contains(std::hash<GraphicsPipelineKey>{}(sel.graphics_key));
-        if (!saved && !pending_graphics.contains(sel.graphics_key) && compiler->HasCapacity()) {
+        // millisecond: built here at once, its draw neither skipped nor queued.
+        if (const auto* restored = RestoreSaved()) {
+            return restored;
+        }
+        if (!pending_graphics.contains(sel.graphics_key) && compiler->HasCapacity()) {
             PhaseTimer capture{g_ps4rt_snapshot_ns};
             auto build = std::make_shared<AsyncGraphicsCompilation>();
             build->selection = sel;
@@ -810,8 +811,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
         // ps4rt: a motion variant built for the first time: until it is ready the draw uses
         // its ordinary pipeline if that one exists or was saved (camera motion only for these
         // frames), so a draw an earlier session had ready is neither skipped nor waited for.
-        bool plain_saved = false;
-        if (!saved && sel.graphics_key.motion_vectors && !sel.worker) {
+        if (sel.graphics_key.motion_vectors && !sel.worker) {
             const PipelineSelection motion_sel = sel;
             sel.no_motion = true;
             const bool plain = RefreshGraphicsKey(sel);
@@ -821,19 +821,18 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
                 if (built != graphics_pipelines.end()) {
                     return built->second.get();
                 }
-                plain_saved =
-                    saved_graphics.Contains(std::hash<GraphicsPipelineKey>{}(sel.graphics_key));
+                if (const auto* restored = RestoreSaved()) {
+                    return restored;
+                }
             }
-            if (!plain_saved) {
-                sel = motion_sel;
-            }
+            sel = motion_sel;
         }
-        if (!saved && !plain_saved && skip_pending) { // queued, or the queue is full: tried again next frame
+        if (skip_pending) { // queued, or the queue is full: tried again next frame
             ++g_ps4rt_pending_draws;
             return nullptr;
         }
         if (const auto pending = pending_graphics.find(sel.graphics_key);
-            !plain_saved && pending != pending_graphics.end()) {
+            pending != pending_graphics.end()) {
             {
                 PhaseTimer waiting{g_ps4rt_compile_wait_ns};
                 pending->second->job.Wait();
@@ -842,8 +841,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             const auto ready = graphics_pipelines.find(sel.graphics_key);
             return ready != graphics_pipelines.end() ? ready->second.get() : nullptr;
         }
-        // A saved pipeline, or no job was accepted (for example, queue capacity): build this
-        // pipeline below.
+        // No job was accepted (for example, queue capacity): build this pipeline below.
     }
     const auto [it, is_new] = graphics_pipelines.try_emplace(sel.graphics_key);
     if (is_new) {
@@ -874,6 +872,27 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
         sel.fetch_shader.reset();
     }
     return it->second.get();
+}
+
+const GraphicsPipeline* PipelineCache::RestoreSaved() {
+    const auto pipeline_hash = std::hash<GraphicsPipelineKey>{}(sel.graphics_key);
+    if (!saved_graphics.Contains(pipeline_hash)) {
+        return nullptr;
+    }
+    CompileTimer timer;
+    GraphicsPipeline::SerializationSupport sdata{};
+    auto pipeline = std::make_unique<GraphicsPipeline>(
+        instance, scheduler, desc_heap, profile, sel.graphics_key, *pipeline_cache, sel.infos,
+        sel.runtime_infos, sel.fetch_shader, sel.modules, sdata, false, true);
+    if (!pipeline->Restored()) {
+        saved_graphics.Forget(pipeline_hash);
+        return nullptr;
+    }
+    LOG_INFO(Render_Vulkan, "Restoring saved graphics pipeline {:#x}", pipeline_hash);
+    ++num_new_pipelines; // its key is on disk already
+    sel.fetch_shader.reset();
+    return graphics_pipelines.insert_or_assign(sel.graphics_key, std::move(pipeline))
+        .first->second.get();
 }
 
 const ComputePipeline* PipelineCache::GetComputePipeline() {

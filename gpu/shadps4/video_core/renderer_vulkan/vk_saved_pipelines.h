@@ -45,6 +45,10 @@ public:
     [[nodiscard]] bool Contains(std::uint64_t hash) const {
         return hashes.contains(hash);
     }
+    /// One the driver has no binary for any more: built like a pipeline never seen.
+    void Forget(std::uint64_t hash) {
+        hashes.erase(hash);
+    }
     [[nodiscard]] std::size_t Size() const {
         return hashes.size();
     }

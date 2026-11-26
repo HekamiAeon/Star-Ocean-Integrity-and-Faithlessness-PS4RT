@@ -93,8 +93,14 @@ public:
                      std::span<const Shader::RuntimeInfo, MaxShaderStages> runtime_infos,
                      std::optional<const Shader::Gcn::FetchShaderData> fetch_shader,
                      std::span<const vk::ShaderModule> modules, SerializationSupport& sdata,
-                     bool preloading);
+                     bool preloading, bool restore_only = false);
     ~GraphicsPipeline();
+
+    /// ps4rt: false for one asked for with restore_only that the driver has no stored binary
+    /// for: nothing was compiled and it cannot be drawn with (PipelineCache::RestoreSaved).
+    bool Restored() const noexcept {
+        return bool(pipeline);
+    }
 
     // ps4rt: switch from compiler-owned snapshots to live stage data on publication.
     void PublishStages(std::span<const Shader::Info*, MaxShaderStages> infos) {
