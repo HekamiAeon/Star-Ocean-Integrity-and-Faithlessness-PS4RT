@@ -23,7 +23,7 @@ if [[ ${1:-} == --test ]]; then
         cpu-image-writeback-test color-export-test image-subresource-test pool-reuse-test wide-screen-test gpu-workarounds-test \
         camera-layout-test scene-camera-history-test menu-input-test menu-sounds-test graphics-settings-test \
         pipeline-binary-policy-test achievements-test achievements-ui-test repeated-targets-test \
-        screen-pass-jitter-test
+        screen-pass-jitter-test guest-reads-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc \
         tests/test_content.c src/runtime_content.c -o out/content-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" -I. -Isrc \

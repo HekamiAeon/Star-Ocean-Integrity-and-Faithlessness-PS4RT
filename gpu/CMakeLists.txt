@@ -269,6 +269,11 @@ add_executable(pipeline-binary-policy-test EXCLUDE_FROM_ALL ../tests/test_pipeli
 target_include_directories(pipeline-binary-policy-test PRIVATE shadps4)
 target_compile_options(pipeline-binary-policy-test PRIVATE -UNDEBUG)
 add_test(NAME pipeline-binary-policy COMMAND pipeline-binary-policy-test)
+add_executable(guest-reads-test EXCLUDE_FROM_ALL ../tests/test_guest_reads.cpp)
+target_include_directories(guest-reads-test PRIVATE shadps4)
+target_compile_options(guest-reads-test PRIVATE -UNDEBUG -pthread)
+target_link_options(guest-reads-test PRIVATE -pthread)
+add_test(NAME guest-reads COMMAND guest-reads-test)
 
 # Local achievements (adapted from the Code Fairy port): the shared service and its
 # overlay navigation need no graphics device, guest process or original game files.

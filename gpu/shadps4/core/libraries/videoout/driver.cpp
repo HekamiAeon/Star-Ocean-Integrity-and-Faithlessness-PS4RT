@@ -41,7 +41,7 @@ namespace Vulkan {
 extern std::atomic<u64> g_ps4rt_compile_ns;
 extern std::atomic<u32> g_ps4rt_compiles;
 extern std::atomic<u64> g_ps4rt_capture_ns, g_ps4rt_async_ns, g_ps4rt_compile_wait_ns;
-extern std::atomic<u64> g_ps4rt_snapshot_ns, g_ps4rt_guest_wait_ns;
+extern std::atomic<u64> g_ps4rt_snapshot_ns;
 extern std::atomic<u32> g_ps4rt_pending_draws;
 extern std::atomic<u64> g_ps4rt_flips;
 } // namespace Vulkan

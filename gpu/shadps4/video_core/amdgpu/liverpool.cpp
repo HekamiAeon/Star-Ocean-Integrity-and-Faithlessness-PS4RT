@@ -258,6 +258,8 @@ void SignalEop(const PM4CmdEventWriteEop& eop) {
 // the draw recording thread when the draw pipeline is in use).
 void RunEventWriteEop(Vulkan::Rasterizer& rasterizer, const u8* data) {
     const auto eop = *reinterpret_cast<const PM4CmdEventWriteEop*>(data);
+    // Here, not where the fence is signalled: that may be the Vulkan recording thread.
+    Vulkan::GuestReads::Wait();
     rasterizer.ProcessDownloadImages();
     // Guest memory copies on the copy threads precede the fence the guest sees.
     // PS4RT_ASYNC_FENCES=1 writes it once they are done instead of waiting for them; measured
@@ -284,6 +286,9 @@ void RunEventWriteEop(Vulkan::Rasterizer& rasterizer, const u8* data) {
 void RunDmaData(Vulkan::Rasterizer& rasterizer, const u8* data) {
     const auto* dma_data = reinterpret_cast<const PM4DmaData*>(data);
     ASSERT(dma_data->command.das == 0);
+    if (dma_data->dst_sel == DmaDataDst::Memory || dma_data->dst_sel == DmaDataDst::MemoryUsingL2) {
+        Vulkan::GuestReads::Wait(); // a write the guest can see
+    }
     if (dma_data->src_sel == DmaDataSrc::Data && dma_data->dst_sel == DmaDataDst::Gds) {
         rasterizer.FillBuffer(dma_data->dst_addr_lo, dma_data->NumBytes(),
                                dma_data->data, true);
@@ -423,9 +428,11 @@ Liverpool::Task Liverpool::ProcessCeUpdate(std::span<const u32> ccb) {
             break;
         }
         case PM4ItOpcode::DumpConstRam: {
-            // ps4rt: earlier draws on the recording thread may still read constants here.
+            // ps4rt: earlier draws on the recording thread may still read constants here, and
+            // so may the translation of their shaders.
             if (rasterizer) {
                 rasterizer->DrainDrawPipe(Vulkan::DrawPipe::ReasonConstRam);
+                Vulkan::GuestReads::Wait();
             }
             const auto* dump_const = reinterpret_cast<const PM4DumpConstRam*>(header);
             memcpy(dump_const->Address<void*>(),

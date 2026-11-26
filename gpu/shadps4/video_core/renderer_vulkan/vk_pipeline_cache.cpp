@@ -14,6 +14,7 @@
 #include "ps4rt_gpu_workarounds.h"
 
 #include "common/hash.h"
+#include "common/scope_exit.h"
 #include "common/thread.h"
 #include "common/io_file.h"
 #include "common/path_util.h"
@@ -58,6 +59,7 @@ struct AsyncShaderCompilation {
     vk::ShaderModule module{};
     size_t permutation{};
     bool initial{};
+    bool saved_slot{}; ///< fills a permutation loaded without SPIR-V (LoadSavedPermutations)
     ~AsyncShaderCompilation() {
         ir.reset();
         if (pools) {
@@ -401,13 +403,16 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
     // ps4rt: new shaders and pipelines always compile on these threads (AsyncCompilation).
     {
         const auto count = std::clamp(Ps4RtThreads::Available() / 2, 1u, 6u);
-        const auto capture_count = std::min(2u, std::max(1u, Ps4RtThreads::Available() / 4));
+        // Shaders are translated and emitted side by side (QueueShader). Writes the guest can
+        // see wait for every translation accepted (GuestReads), so the queue is bounded: a burst
+        // of new shaders spreads over a few frames instead of stretching one.
+        const auto capture_count = std::clamp(Ps4RtThreads::Available() / 4, 1u, 4u);
         for (unsigned i = 0; i < count; ++i) {
             auto [result, worker_cache] = instance.GetDevice().createPipelineCacheUnique({});
             ASSERT_MSG(result == vk::Result::eSuccess, "Failed to create compiler pipeline cache");
             worker_pipeline_caches.push_back(std::move(worker_cache));
         }
-        capture_compiler = std::make_unique<AsyncCompiler>(capture_count, 8, [](unsigned index) {
+        capture_compiler = std::make_unique<AsyncCompiler>(capture_count, 16, [](unsigned index) {
             Common::SetCurrentThreadName(("ps4rt:ShaderCapture" + std::to_string(index)).c_str());
             Common::SetCurrentThreadPriority(Common::ThreadPriority::High);
         });
@@ -429,7 +434,7 @@ PipelineCache::~PipelineCache() {
 std::atomic<u64> g_ps4rt_compile_ns;
 std::atomic<u32> g_ps4rt_compiles;
 std::atomic<u64> g_ps4rt_capture_ns, g_ps4rt_async_ns, g_ps4rt_compile_wait_ns;
-std::atomic<u64> g_ps4rt_snapshot_ns, g_ps4rt_guest_wait_ns;
+std::atomic<u64> g_ps4rt_snapshot_ns;
 std::atomic<u32> g_ps4rt_pool_reuses;
 std::atomic<u32> g_ps4rt_pending_draws;
 std::atomic<u64> g_ps4rt_flips; ///< frames handed to the display, counted on the GPU thread
@@ -464,8 +469,9 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
                                  Shader::RuntimeInfo runtime_info,
                                  Shader::Backend::Bindings binding, size_t permutation,
                                  bool initial,
-                                 std::optional<Shader::StageSpecialization> specialization) {
-    if (!compiler->HasCapacity()) {
+                                 std::optional<Shader::StageSpecialization> specialization,
+                                 bool saved_slot) {
+    if (!capture_compiler->HasCapacity()) {
         return false;
     }
     PhaseTimer snapshot{g_ps4rt_snapshot_ns};
@@ -483,44 +489,34 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
     build->binding = binding;
     build->permutation = permutation;
     build->initial = initial;
+    build->saved_slot = saved_slot;
     if (specialization) {
         build->spec = *specialization;
     }
     build->pool_cache = &compiler_pools;
     snapshot.Stop();
-    AsyncJob<bool> capture_job;
-    if (!capture_job.Start(*capture_compiler, [this, build, binding] {
-        PhaseTimer capture{g_ps4rt_capture_ns};
-        auto [pools, reused] = compiler_pools.Acquire();
-        build->pools = std::move(pools);
-        if (reused) {
-            ++g_ps4rt_pool_reuses;
+    // ps4rt: the translation reads guest memory (shader resource tables, the fetch shader). It
+    // runs beside the command stream: this thread goes on, and the writes the guest can see wait
+    // for it (GuestReads). The same thread then emits the SPIR-V, so the IR is freed where it was
+    // allocated: its thousands of small blocks stay in that thread's allocator cache instead of
+    // going through the lock of the process's single heap (loader.c).
+    GuestReads::Begin();
+    const bool queued = build->job.Start(*capture_compiler, [this, build, binding] {
+        {
+            SCOPE_EXIT {
+                GuestReads::End();
+            };
+            PhaseTimer capture{g_ps4rt_capture_ns};
+            auto [pools, reused] = compiler_pools.Acquire();
+            build->pools = std::move(pools);
+            if (reused) {
+                ++g_ps4rt_pool_reuses;
+            }
+            build->ir.emplace(Shader::TranslateProgram(build->code, *build->pools, build->info,
+                                                       build->runtime, profile));
+            build->spec = Shader::StageSpecialization(build->info, build->runtime, profile, binding);
+            build->fetch.Capture(build->info);
         }
-        // ps4rt: the GPU thread waits until all guest reads and specialization are captured.
-        build->ir.emplace(Shader::TranslateProgram(build->code, *build->pools, build->info,
-                                                   build->runtime, profile));
-        build->spec = Shader::StageSpecialization(build->info, build->runtime, profile, binding);
-        build->fetch.Capture(build->info);
-        return true;
-    })) {
-        return false;
-    }
-    {
-        PhaseTimer waiting{g_ps4rt_guest_wait_ns};
-        capture_job.Wait();
-    }
-    if (!capture_job.Poll()) {
-        if (initial) {
-            program.compilation_failed = true;
-        } else {
-            specialization->info = &program.info;
-            program.failed_permutations.push_back(std::move(*specialization));
-        }
-        LOG_ERROR(Render_Vulkan, "ps4rt: shader {:#x}/{} capture failed: {}", params.hash,
-                  permutation, capture_job.Error());
-        return false;
-    }
-    const bool queued = build->job.Start(*compiler, [this, build] {
         PhaseTimer compile{g_ps4rt_async_ns};
         Shader::Gcn::ScopedFetchShaderSnapshot snapshot{build->fetch};
         auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, build->runtime, *build->ir,
@@ -535,12 +531,14 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
         build->ir.reset();
         compiler_pools.Recycle(std::move(build->pools));
         return build;
-    }, true);
-    if (queued) {
-        program.pending = std::move(build);
-        pending_programs.push_back(&program);
+    });
+    if (!queued) {
+        GuestReads::End();
+        return false;
     }
-    return queued;
+    program.pending = std::move(build);
+    pending_programs.push_back(&program);
+    return true;
 }
 
 void PipelineCache::PublishShaders(bool wait) {
@@ -589,7 +587,11 @@ void PipelineCache::PublishShaders(bool wait) {
             build->spec.info = &program->info;
             RegisterShaderMeta(program->info, build->spec.fetch_shader_data, build->spec,
                                perm_hash, build->permutation, spv_hash);
-            program->AddPermut(build->module, std::move(build->spec));
+            if (build->saved_slot) {
+                program->modules[build->permutation].module = build->module;
+            } else {
+                program->AddPermut(build->module, std::move(build->spec));
+            }
             build->module = nullptr;
             program->pending.reset();
         }
@@ -1454,6 +1456,14 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
         // ps4rt: a saved permutation without usable SPIR-V: translated at its own number.
         perm_idx = std::distance(program->modules.begin(), it);
         perm_hash = HashCombine(params.hash, perm_idx);
+        if (compile_async) {
+            if (!program->pending && std::ranges::find(program->failed_permutations, spec) ==
+                                         program->failed_permutations.end()) {
+                QueueShader(*program, hw_stage, sw_stage, params, runtime_info, binding, perm_idx,
+                            false, std::move(spec), true);
+            }
+            return {};
+        }
         auto new_info = Shader::Info(hw_stage, sw_stage, params);
         u64 spv_hash{};
         module = CompileModule(new_info, runtime_info, params.code, perm_idx, binding, spv_hash);

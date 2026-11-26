@@ -147,6 +147,41 @@ private:
     std::string error;
 };
 
+// ps4rt: shader translations that still read guest memory (PipelineCache::QueueShader). They run
+// beside the command stream. The guest keeps that memory as it is until it hears that the GPU
+// got past the draw, so every write the guest can see first waits for them (Wait).
+class GuestReads {
+public:
+    static void Begin() { pending.fetch_add(1, std::memory_order_release); }
+    static void End() {
+        if (pending.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            std::scoped_lock lock{mutex};
+            done.notify_all();
+        }
+    }
+    /// On the GPU command thread or the draw recording thread only: a read may fault and need
+    /// the Vulkan recording thread.
+    static void Wait() {
+        if (pending.load(std::memory_order_acquire) == 0) {
+            return;
+        }
+        const auto start = std::chrono::steady_clock::now();
+        {
+            std::unique_lock lock{mutex};
+            done.wait(lock, [] { return pending.load(std::memory_order_acquire) == 0; });
+        }
+        wait_ns += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now() - start).count());
+    }
+    static unsigned Pending() { return pending.load(std::memory_order_acquire); }
+    static inline std::atomic<uint64_t> wait_ns{}; ///< time spent in Wait (frame statistics)
+
+private:
+    static inline std::atomic<unsigned> pending{};
+    static inline std::mutex mutex;
+    static inline std::condition_variable done;
+};
+
 // ps4rt: IR retains its pools until emission finishes, then returns them for another translation.
 template <typename T>
 class CompilerPool {

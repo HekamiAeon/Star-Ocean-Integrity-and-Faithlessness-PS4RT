@@ -25,6 +25,9 @@
 #include <execinfo.h>
 #include <sys/syscall.h>
 #include <sys/uio.h>
+#ifdef __GLIBC__
+#include <gnu/libc-version.h>
+#endif
 #endif
 
 typedef struct { uint64_t address, size, flags; } Segment;
@@ -457,7 +460,31 @@ static int cpu_supported(char *missing, size_t size) {
     return 1;
 }
 
+#if !defined(_WIN32) && defined(__GLIBC__)
+/* With the single arena set in main, every host thread shares one heap lock, and the shader
+ * translator and the driver's pipeline compiler allocate small blocks by the thousand: while
+ * shaders compiled, a translation blocked on that lock about 1,300 times (2 with this). A large
+ * per-thread cache keeps the blocks a thread frees for its own next allocations, off the lock.
+ * glibc reads the setting at program start only, so the program starts itself once more with it. */
+static void use_large_thread_cache(char **argv) {
+    const char *tunables = getenv("GLIBC_TUNABLES");
+    if (tunables && strstr(tunables, "glibc.malloc.tcache_count")) return;
+    int major = 0, minor = 0;
+    sscanf(gnu_get_libc_version(), "%d.%d", &major, &minor);
+    const int count = major > 2 || (major == 2 && minor >= 30) ? 16384 : 127; /* 127: the old limit */
+    char value[1024];
+    const int length = snprintf(value, sizeof value, "%s%sglibc.malloc.tcache_count=%d",
+                                tunables ? tunables : "", tunables && *tunables ? ":" : "", count);
+    if (length < 0 || length >= (int)sizeof value || setenv("GLIBC_TUNABLES", value, 1) != 0) return;
+    execv("/proc/self/exe", argv);
+    /* Not restarted: the run goes on with the default cache. */
+}
+#endif
+
 int main(int argc, char **argv) {
+#if !defined(_WIN32) && defined(__GLIBC__)
+    use_large_thread_cache(argv);
+#endif
     setvbuf(stdout, NULL, _IONBF, 0);
 #ifndef _WIN32
     /* Keep host heap objects handed to the guest (thread handles, TLS) in the

@@ -186,7 +186,8 @@ private:
     bool QueueShader(Program& program, Shader::HwStage stage, Shader::SwStage l_stage,
                      const Shader::ShaderParams& params, Shader::RuntimeInfo runtime_info,
                      Shader::Backend::Bindings binding, size_t permutation, bool initial,
-                     std::optional<Shader::StageSpecialization> specialization = {});
+                     std::optional<Shader::StageSpecialization> specialization = {},
+                     bool saved_slot = false);
     void PublishShaders(bool wait = false);
     void PublishGraphics(bool wait = false);
     void FinishCompilations();

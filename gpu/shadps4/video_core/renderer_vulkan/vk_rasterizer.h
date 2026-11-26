@@ -125,9 +125,11 @@ public:
     /// Stage A: guest memory the recording thread will write for work handed to it (storage
     /// buffers, DMA, WriteData, fences); constants overlapping it are bound there, not copied here.
     void NotePendingGpuWrite(VAddr address, u64 size);
-    /// Before a guest-visible write: fences deferred earlier are written first.
+    /// Before a guest-visible write: fences deferred earlier are written first, and shader
+    /// translations have read the guest memory they need (GuestReads).
     void WaitDeferredSignals() {
         scheduler.WaitDeferredSignals();
+        GuestReads::Wait();
     }
     /// Runs `signal` after the guest memory copies issued so far, without waiting here.
     void SignalAfterHostCopies(std::function<void()> signal) {
