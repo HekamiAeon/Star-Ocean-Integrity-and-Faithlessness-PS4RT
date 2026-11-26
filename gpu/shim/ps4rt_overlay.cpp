@@ -474,6 +474,10 @@ void CompactGraphics() {
         }
         Help("Optional sharpening. 0% disables it; larger values can add halos around edges. Applies live.");
         ImGui::PopID();
+        CheckRow("Asynchronous compilation", s.async_shaders,
+                 "ON: smoother first-use shader loading, with occasional brief "
+                 "visual flickers. OFF: occasional shader-loading stutters, "
+                 "with more reliable rendering. Applies live and saves on close.");
         LanguageRow();
         ImGui::EndTable();
     }
@@ -548,6 +552,8 @@ void PerformanceTab() {
         static const char* const queued_labels[] = {"1 (lowest latency)", "2", "Unlimited"};
         ChoiceRow("Frames queued", s.frames_queued, queued_labels, G::FramesQueued.data(),
                   int(G::FramesQueued.size()), "More frames queued: steadier FPS, slower response to input.");
+        CheckRow("Compile new shaders in the background", s.async_shaders,
+                 "Fewer stutters in new areas; an object or effect may appear a moment later.");
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Applied on restart");

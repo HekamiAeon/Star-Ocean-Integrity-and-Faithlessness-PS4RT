@@ -69,6 +69,10 @@ struct Values {
     std::atomic<int> display_mode{0};
     std::atomic<bool> vsync{true};
     std::atomic<int> fps_limit{0};
+    // New shaders and pipelines compile in the background for a fresh Star Ocean user config:
+    // a draw whose pipeline is not ready is left out until it is, instead of the frame stopping
+    // for the compile. A saved opt-out compiles them on the spot (no late draws, stutters).
+    std::atomic<bool> async_shaders{true};
     std::atomic<bool> fsr1{false};
     std::atomic<bool> rcas{true};
     std::atomic<int> rcas_strength{75};

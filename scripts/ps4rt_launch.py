@@ -242,7 +242,7 @@ def main(argv=None) -> int:
     env = os.environ.copy()
     # Do not leak compatibility overrides from the caller's shell into a new title.
     for key in ('PS4RT_TRANSITION_SNAPSHOT', 'PS4RT_BC6_FLOAT',
-                'PS4RT_WQM_HELPERS',
+                'PS4RT_WQM_HELPERS', 'PS4RT_ASYNC_SHADERS',
                 'PS4RT_OBJECT_MOTION', 'PS4RT_FSR1', 'PS4RT_PARTIAL_HEIGHT_VIEWS',
                 'PS4RT_UPSCALER', 'PS4RT_OUTPUT_RES', 'PS4RT_RENDER_RES',
                 'PS4RT_UPSCALE_PRESET', 'PS4RT_UPSCALE_BEFORE_CS',
@@ -250,6 +250,8 @@ def main(argv=None) -> int:
                 'PS4RT_FSR_SHARPNESS', 'PS4RT_JITTER'):
         env.pop(key, None)
     # Start with the known working runtime behavior; future ports adapt it in-source.
+    # Do not force PS4RT_ASYNC_SHADERS here: the in-game menu writes its
+    # choice to out/<title_id>/ps4rt.ini. New configs default to asynchronous compilation.
     env.update(PS4RT_BC6_FLOAT='unsigned', PS4RT_TRANSITION_SNAPSHOT='1',
                PS4RT_OBJECT_MOTION='0', PS4RT_FSR1='0',
                PS4RT_PARTIAL_HEIGHT_VIEWS='0')

@@ -20,29 +20,26 @@ int main() {
     setenv("PS4RT_CONFIG", path, 1);
     for (const char* key : {"PS4RT_UPSCALER", "PS4RT_OUTPUT_RES", "PS4RT_RCAS",
                             "PS4RT_OBJECT_MOTION", "PS4RT_JITTER",
-                            "PS4RT_SO_RESOLUTION"}) unsetenv(key);
+                            "PS4RT_ASYNC_SHADERS", "PS4RT_SO_RESOLUTION"}) unsetenv(key);
     auto& s = Get();
     Load();
     assert(s.native_scene && s.CompactGraphicsMenu());
     assert(s.upscaler == UpscalerOff && s.output_res == OutputDefault);
     assert(!s.object_motion && !s.jitter && !s.rcas && s.temporal_problem);
-    // Shaders always compile in the background now: an older config's async_shaders line loads
-    // without error and is dropped on the next save.
-    {
-        FILE* old = std::fopen(path, "w");
-        assert(old);
-        std::fputs("async_shaders=0\nvsync=0\n", old);
-        std::fclose(old);
-        Load();
-        assert(!s.vsync);
-        Save();
-        old = std::fopen(path, "r");
-        assert(old);
-        char line[256];
-        while (std::fgets(line, sizeof(line), old)) assert(!std::strstr(line, "async_shaders"));
-        std::fclose(old);
-        s.vsync = true;
-    }
+    // Fresh configs ship with background compilation (the menu's option turns it off).
+    assert(s.async_shaders);
+    // The overlay changes this atomic live. Make sure closing the panel and
+    // relaunching respects either saved choice, without launcher overrides.
+    s.async_shaders = true;
+    Save();
+    s.async_shaders = false;
+    Load();
+    assert(s.async_shaders);
+    s.async_shaders = false;
+    Save();
+    s.async_shaders = true;
+    Load();
+    assert(!s.async_shaders);
     // Outputs only persist when larger than the internal resolution (same aspect): use 720p
     // (Resolutions index 1) so 1080p, 1440p and 4K outputs are all valid.
     s.render_resolution = 1;
