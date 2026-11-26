@@ -974,7 +974,8 @@ static std::optional<Vulkan::StarOceanMovie::Layout> MovieLayout(
 }
 
 // Wide screens (star_ocean_fill.h): a four-vertex draw through one of the game's two 2D
-// transforms, into a viewport wider than 16:9, with float positions the renderer can read.
+// transforms, into a viewport wider than 16:9 (a fill: also the game's 16:9 frame at another
+// size than the canvas), with float positions the renderer can read.
 struct Quad2D {
     Vulkan::StarOceanFill::Space space{};
     float width{}, height{}; ///< viewport, guest pixels
@@ -1005,8 +1006,11 @@ static Vulkan::StarOceanFill::Space DrawSpace(const Vulkan::GraphicsPipeline* pi
 }
 
 // The 2D transform and viewport of such a draw, with any vertex count (no points read).
+// `fill`: asked by the fill rule, which also looks at pixel-space draws into a 16:9 frame
+// (star_ocean_fill.h ViewportRules).
 static std::optional<Quad2D> ReadView2D(const Vulkan::GraphicsPipeline* pipeline,
-                                        const AmdGpu::Regs& regs, Core::MemoryManager& memory) {
+                                        const AmdGpu::Regs& regs, Core::MemoryManager& memory,
+                                        bool fill = false) {
     using namespace Vulkan::StarOceanFill;
     const auto& fetch = pipeline->GetFetchShader();
     if (!fetch || regs.IsClipDisabled() || regs.num_instances.NumInstances() != 1) return {};
@@ -1014,21 +1018,27 @@ static std::optional<Quad2D> ReadView2D(const Vulkan::GraphicsPipeline* pipeline
     Quad2D quad;
     quad.width = vp.xscale * 2;
     quad.height = std::abs(vp.yscale) * 2;
-    // 16:9 (or narrower) is never touched; the viewport starts at the target's left edge.
-    if (!(quad.height > 0) || quad.width * canvas_height <= quad.height * canvas_width * 1.0005f ||
+    // 16:9 (or narrower) is only touched for a fill, on the game's frame at another size than
+    // the canvas; the viewport starts at the target's left edge.
+    const Rules rules = ViewportRules(quad.width, quad.height,
+                                      float(Vulkan::SceneResolution::game_frame.width),
+                                      float(Vulkan::SceneResolution::game_frame.height));
+    if (rules == Rules::None || (rules == Rules::Fill && !fill) ||
         std::abs(vp.xoffset - vp.xscale) > 0.01f) return {};
     const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
     if (const auto [first_vertex, first_instance] = GetDrawOffsets(regs, vs, fetch);
         first_vertex || first_instance) return {};
     quad.space = DrawSpace(pipeline, memory, quad.width, quad.height);
-    if (quad.space == Space::None) return {};
+    if (quad.space == Space::None || (rules == Rules::Fill && quad.space != Space::Pixel))
+        return {};
     return quad;
 }
 
 static std::optional<Quad2D> ReadQuad2D(const Vulkan::GraphicsPipeline* pipeline,
-                                        const AmdGpu::Regs& regs, Core::MemoryManager& memory) {
+                                        const AmdGpu::Regs& regs, Core::MemoryManager& memory,
+                                        bool fill = false) {
     if (regs.num_indices != 4) return {};
-    auto quad = ReadView2D(pipeline, regs, memory);
+    auto quad = ReadView2D(pipeline, regs, memory, fill);
     if (!quad) return {};
     const auto readable = [&](VAddr address, u64 bytes) {
         return address && memory.IsValidGpuMapping(address, 0) &&
@@ -2420,12 +2430,13 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
 
     v.num_buffers = static_cast<u32>(guest_buffers.size());
 
-    // Wide screens: a plain colour quad covering the whole 1920x1080 canvas is a screen fill
-    // (backdrop, fade, dimmed background). A fresh copy of its positions covers the whole
-    // screen instead of the centred 16:9 area (star_ocean_fill.h). Pictures are untouched.
+    // A plain colour quad covering the whole 1920x1080 canvas is a screen fill (backdrop, fade,
+    // dimmed background). A fresh copy of its positions covers the whole screen: on a wide
+    // screen instead of the centred 16:9 area, and at every internal resolution instead of
+    // 1920x1080 of the screen's pixels (star_ocean_fill.h). Pictures are untouched.
     const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
     if (!ps || !ps->images.empty()) return;
-    const auto quad = ReadQuad2D(pipeline, regs, *memory);
+    const auto quad = ReadQuad2D(pipeline, regs, *memory, true);
     if (!quad || quad->size > 64 * 1024 ||
         memory->ClampRangeSize(quad->address, quad->size) != quad->size) return;
     const auto widened =

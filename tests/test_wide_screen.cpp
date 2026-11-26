@@ -53,6 +53,50 @@ void FillTests() {
     assert(!Widen(Space::Pixel, backdrop, 1920, 1080)); // stock size: unchanged
     const Point partial[4] = {{0, 0}, {0, 540}, {960, 540}, {960, 0}};
     assert(!Widen(Space::Pixel, partial, 5120, 1440)); // only exact full-canvas quads
+    // The same fill on a 16:9 screen of another size: 1920x1080 pixels of a 3840x2160 target
+    // are its top-left quarter (a black box over every fade at 4K, the rest left uncovered).
+    out = Widen(Space::Pixel, backdrop, 3840, 2160);
+    assert(out && Close((*out)[0], {0, 0}) && Close((*out)[1], {0, 2160}) &&
+           Close((*out)[2], {3840, 2160}) && Close((*out)[3], {3840, 0}));
+    out = Widen(Space::Pixel, backdrop, 2560, 1440);
+    assert(out && Close((*out)[1], {0, 1440}) && Close((*out)[2], {2560, 1440}));
+    out = Widen(Space::Pixel, backdrop, 1280, 720); // larger than the screen: now its size
+    assert(out && Close((*out)[2], {1280, 720}) && Close((*out)[3], {1280, 0}));
+    assert(!Widen(Space::Pixel, partial, 3840, 2160));
+    // Which viewports the rules look at. Wider than 16:9: every rule, as before.
+    assert(ViewportRules(5120, 1440, 5120, 1440) == Rules::All);
+    assert(ViewportRules(2560, 1080, 2560, 1080) == Rules::All);
+    assert(ViewportRules(2560, 720, 5120, 1440) == Rules::All); // wide, not the frame
+    // The game's 16:9 frame at another size than the canvas: the pixel-space fill alone.
+    assert(ViewportRules(3840, 2160, 3840, 2160) == Rules::Fill);
+    assert(ViewportRules(2560, 1440, 2560, 1440) == Rules::Fill);
+    assert(ViewportRules(1280, 720, 1280, 720) == Rules::Fill);
+    assert(ViewportRules(1024, 576, 1024, 576) == Rules::Fill);
+    // The game's own size, and targets that are not the frame (a canvas-size picture or a
+    // half-size pass at 4K, a half-size pass at 1080p, a shadow map): nothing.
+    assert(ViewportRules(1920, 1080, 1920, 1080) == Rules::None);
+    assert(ViewportRules(1920, 1080, 3840, 2160) == Rules::None);
+    assert(ViewportRules(1920, 1080, 5120, 1440) == Rules::None);
+    assert(ViewportRules(960, 540, 1920, 1080) == Rules::None);
+    assert(ViewportRules(1280, 720, 2560, 1440) == Rules::None);
+    assert(ViewportRules(4096, 4096, 3840, 2160) == Rules::None);
+    assert(ViewportRules(0, 2160, 3840, 2160) == Rules::None &&
+           ViewportRules(3840, 0, 3840, 2160) == Rules::None &&
+           ViewportRules(NAN, 2160, 3840, 2160) == Rules::None);
+    // Every internal resolution the menu offers, drawn into its own frame: a rule for each
+    // but the game's own 1920x1080.
+    constexpr int offered[][2] = {{1920, 1080}, {1280, 720}, {1024, 576}, {2560, 1440},
+                                  {3840, 2160}, {2560, 1080}, {3440, 1440}, {3840, 1440},
+                                  {3840, 1080}, {5120, 1440}};
+    for (const auto& size : offered) {
+        const float w = float(size[0]), h = float(size[1]);
+        const Rules rules = ViewportRules(w, h, w, h);
+        const bool native = size[0] == 1920 && size[1] == 1080;
+        const bool wide = size[0] * 9 > size[1] * 16;
+        assert(rules == (native ? Rules::None : wide ? Rules::All : Rules::Fill));
+        const auto fill = Widen(Space::Pixel, backdrop, w, h);
+        assert(native ? !fill : fill && Close((*fill)[2], {w, h}));
+    }
 
     // Canvas fill: widened about the canvas centre to the visible width.
     out = Widen(Space::Canvas, backdrop, 5120, 1440); // 32:9: visible canvas -960..2880

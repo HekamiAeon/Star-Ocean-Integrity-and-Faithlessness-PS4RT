@@ -13,11 +13,13 @@
 // Wide screens: the game's 2D layer stays a 1920x1080 canvas, shown in a centred 16:9 area.
 // Plain colour quads that cover that whole canvas are screen fills (black backdrops behind
 // splash pictures, fades, dimmed backgrounds); on a wide screen they must cover the whole
-// screen, not the 16:9 area. Pictures keep their 16:9 shape, except the game's transition
-// picture and backgrounds the game draws see-through (StretchedCanvas, Backgrounds); the
-// loading screen's corner art goes into the screen's corner (CoverEdge, EdgeArt), the
-// prompts hung off the right edge to the screen's right edge (EdgeTabs), and the pause
-// menu's panel across the whole screen (Backdrop).
+// screen, not the 16:9 area. The fills drawn in the target's pixels are 1920x1080 pixels at
+// every internal resolution, so they are sized to the screen on a 16:9 one too
+// (ViewportRules). Pictures keep their 16:9 shape, except the game's transition picture and
+// backgrounds the game draws see-through (StretchedCanvas, Backgrounds); the loading screen's
+// corner art goes into the screen's corner (CoverEdge, EdgeArt), the prompts hung off the
+// right edge to the screen's right edge (EdgeTabs), and the pause menu's panel across the
+// whole screen (Backdrop).
 namespace Vulkan::StarOceanFill {
 
 constexpr float canvas_width = 1920;
@@ -52,8 +54,27 @@ inline Space Classify(std::span<const float> c, float width, float height) {
     return Space::None;
 }
 
+// Which of these rules a W x H viewport can need, in a game whose frame (the screen it draws)
+// is `frame_width` x `frame_height`. Wider than 16:9: all of them. The game's 16:9 frame at
+// another size than the canvas: the pixel-space fill alone. The game builds that fill for the
+// canvas, 1920x1080 pixels from the top-left corner, while the pixel transform is the
+// target's: at 3840x2160 the fill covers the top-left quarter of the screen and what it
+// should hide shows around it (at 1280x720 it is larger than the screen, which hides the
+// difference). The canvas's own size and every other target (half-size passes, shadow maps):
+// none.
+enum class Rules { None, Fill, All };
+
+inline Rules ViewportRules(float width, float height, float frame_width, float frame_height) {
+    if (!(width > 0) || !(height > 0)) return Rules::None;
+    if (width * canvas_height > height * canvas_width * 1.0005f) return Rules::All;
+    const bool frame = Near(width, frame_width, 0.5f) && Near(height, frame_height, 0.5f);
+    const bool canvas = Near(width, canvas_width, 0.5f) && Near(height, canvas_height, 0.5f);
+    return frame && !canvas ? Rules::Fill : Rules::None;
+}
+
 // New corner positions for a full-canvas fill quad on a W x H target, or nothing when the quad
-// is not one or the target is 16:9 (nothing to widen).
+// is not one or covers the target as it is (a canvas-space quad on a 16:9 target, a
+// pixel-space one on a target of the canvas's size).
 inline std::optional<std::array<Point, 4>> Widen(Space space, std::span<const Point> points,
                                                  float width, float height) {
     if (points.size() != 4 || !(width > 0) || !(height > 0)) return {};
@@ -68,7 +89,7 @@ inline std::optional<std::array<Point, 4>> Widen(Space space, std::span<const Po
         if ((p[0] != x0 && p[0] != x1) || (p[1] != y0 && p[1] != y1)) return {};
     std::array<Point, 4> out{};
     if (space == Space::Pixel) {
-        // Exactly the canvas, in pixels of a larger target: scaled to the target.
+        // Exactly the canvas, in pixels of a target of another size: scaled to the target.
         constexpr float tol = 0.01f;
         if (!Near(x0, 0, tol) || !Near(y0, 0, tol) || !Near(x1, canvas_width, tol) ||
             !Near(y1, canvas_height, tol))
