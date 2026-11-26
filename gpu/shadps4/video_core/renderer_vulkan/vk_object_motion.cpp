@@ -180,7 +180,10 @@ void ObjectMotion::EnsureImage(u32 width, u32 height) {
     }
     const auto device = instance.GetDevice();
     if (image) {
-        scheduler.Finish();
+        // Commands recorded so far still use the old image: it goes once the GPU is past them.
+        // Not a wait for the GPU: a size that changes inside the frame would stop this thread
+        // for the rest of the GPU's frame, every time.
+        scheduler.DeferOperation([old_image = std::move(image), old_view = std::move(view)] {});
     }
     view.reset();
     image_layout = vk::ImageLayout::eUndefined;

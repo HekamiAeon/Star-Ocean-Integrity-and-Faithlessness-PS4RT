@@ -29,6 +29,7 @@
 #include "video_core/cache_storage.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_depth_stencil_state.h"
+#include "video_core/renderer_vulkan/vk_display_buffers.h"
 #include "video_core/renderer_vulkan/motion_history.h"
 #include "video_core/renderer_vulkan/vk_draw_prep.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -963,15 +964,22 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
                            Ps4RtSettings::Get().upscaler != Ps4RtSettings::UpscalerOff;
     {
         u32 bound = 0;
+        VAddr target = 0; // the first colour target written
         for (s32 cb = 0; cb < AmdGpu::NUM_COLOR_BUFFERS && !skip_cb_binding; ++cb) {
-            bound += (regs.color_buffers[cb] && regs.color_target_mask.GetMask(cb)) ? 1 : 0;
+            if (regs.color_buffers[cb] && regs.color_target_mask.GetMask(cb) && bound++ == 0) {
+                target = regs.color_buffers[cb].Address();
+            }
         }
         // Native-scene titles draw the scene forward: one colour target, the scene depth
         // written, a viewport covering the scene (the rasterizer's scene-pass test). Only
-        // draws into the scene depth then record history (vk_rasterizer.cpp).
+        // draws into the scene depth then record history (vk_rasterizer.cpp). A display buffer
+        // is not the scene: the minimap's quads fit the rest of the rule, and are drawn there
+        // after the upscale, at the output's size. With the motion image attached to them it
+        // changed size twice a frame, and the GPU thread waited for the GPU each time.
         const bool forward_scene = Ps4RtSettings::Get().native_scene && bound == 1 &&
             regs.depth_control.depth_enable && regs.depth_control.depth_write_enable &&
-            UiComposition::SceneViewport(regs.viewports[0].xscale * 2, regs.viewports[0].yscale * 2);
+            UiComposition::SceneViewport(regs.viewports[0].xscale * 2, regs.viewports[0].yscale * 2) &&
+            !DisplayBuffers::Contains(target);
         const bool geometry_targets = bound >= 5 || forward_scene;
         motion_possible = !sel.no_motion && sel.motion_requested &&
                           Shader::MotionVectors::positions_address != 0 && geometry_targets &&
