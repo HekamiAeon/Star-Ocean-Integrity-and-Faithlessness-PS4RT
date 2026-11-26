@@ -22,7 +22,8 @@ if [[ ${1:-} == --test ]]; then
     ninja -C out/gpu -j "${PS4RT_BUILD_JOBS:-4}" display-sample-gpu-test transition-snapshot-gpu-test \
         cpu-image-writeback-test color-export-test image-subresource-test pool-reuse-test wide-screen-test gpu-workarounds-test \
         camera-layout-test scene-camera-history-test menu-input-test menu-sounds-test graphics-settings-test \
-        pipeline-binary-policy-test achievements-test achievements-ui-test repeated-targets-test
+        pipeline-binary-policy-test achievements-test achievements-ui-test repeated-targets-test \
+        screen-pass-jitter-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc \
         tests/test_content.c src/runtime_content.c -o out/content-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" -I. -Isrc \

@@ -1589,6 +1589,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
             });
         }
     }
+    ScreenPassJitter(pipeline);
     pipeline->BindResources(set_writes, push_data);
     // ps4rt: jitter geometry drawn with the scene depth, not full-screen passes (a shifted
     // full-screen quad leaves an edge column unwritten).
@@ -1815,6 +1816,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     push_data.xoffset *= target_scale[0];
     push_data.yscale *= target_scale[1];
     push_data.yoffset *= target_scale[1];
+    ScreenPassJitter(pipeline);
     pipeline->BindResources(set_writes, push_data);
     draw_jitter = {};
     if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth()) {
@@ -3780,6 +3782,28 @@ void Rasterizer::UnmapMemory(VAddr addr, u64 size) {
     {
         std::scoped_lock lock{mapped_ranges_mutex};
         mapped_ranges -= decltype(mapped_ranges)::interval_type::right_open(addr, addr + size);
+    }
+}
+
+// The upscaler's jitter shifts the scene in the viewport, outside the game's matrices. The
+// game's light passes (pixel shaders that write their results into screen images at their own
+// pixel, drawn on the scene depth) rebuild each pixel's position from FragCoord and that
+// jittered depth with the unjittered matrices: the point lands off the surface, which then
+// shadows itself on some jitter phases (Star Ocean: a table in the Mayor's manse flickered).
+// Those passes read FragCoord minus the jitter, as if the jitter were in the game's projection.
+// The pixel they write stays the same: the jitter is under half a pixel.
+void Rasterizer::ScreenPassJitter(const GraphicsPipeline* pipeline) {
+    if (!upscaler->Enabled() || push_data.scene_size != 0 ||
+        Ps4RtToggle::Disabled(Ps4RtToggle::ScreenPassJitter) || !db_desc.first ||
+        db_desc.first != camera_motion->Depth()) {
+        return;
+    }
+    const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+    if (!ps || !ps->JitteredFragCoord()) {
+        return;
+    }
+    if (const auto jitter = upscaler->Jitter(); jitter[0] != 0.0f || jitter[1] != 0.0f) {
+        push_data.scene_size = Shader::PushData::PackJitter(jitter[0], jitter[1]);
     }
 }
 

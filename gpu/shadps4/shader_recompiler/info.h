@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <span>
 #include <vector>
 #include <boost/container/static_vector.hpp>
@@ -158,6 +159,14 @@ struct Info : InfoPersistent {
     Info(HwStage stage_, SwStage l_stage_, ShaderParams params)
         : InfoPersistent(stage_, l_stage_, params.hash), pgm_base{params.Base()},
           user_data{params.user_data} {}
+
+    /// ps4rt: pixel shaders that write images at their own pixel (the game's light passes) read
+    /// FragCoord minus the draw's upscaler jitter (PushData::PackJitter). Decided from the saved
+    /// resources alone, so that a shader loaded from the cache gives the same answer.
+    bool JitteredFragCoord() const {
+        return sw_stage == SwStage::Fragment &&
+               std::ranges::any_of(images, [](const ImageResource& image) { return image.is_written; });
+    }
 
     /// ps4rt: user data of this stage as a draw saw it. The GPU command thread refreshes
     /// user_data/flattened_ud_buf for every draw it decodes, while the draw recording thread

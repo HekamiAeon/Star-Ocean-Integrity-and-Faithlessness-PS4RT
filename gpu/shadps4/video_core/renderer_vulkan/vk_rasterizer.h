@@ -204,6 +204,8 @@ private:
     void DepthStencilCopy(bool is_depth, bool is_stencil);
     void EliminateFastClear();
 
+    /// ps4rt: pixel passes that write images at their own pixel read FragCoord minus the jitter.
+    void ScreenPassJitter(const GraphicsPipeline* pipeline);
     void UpdateDynamicState(const GraphicsPipeline* pipeline, bool is_indexed) const;
     void UpdateViewportScissorState() const;
     void UpdateDepthStencilState() const;

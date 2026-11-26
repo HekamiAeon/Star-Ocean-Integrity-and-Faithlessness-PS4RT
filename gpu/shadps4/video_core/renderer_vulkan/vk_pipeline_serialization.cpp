@@ -611,6 +611,14 @@ static u64 SpirvHash(std::span<const u32> spv) {
     return XXH3_64bits(spv.data(), spv.size_bytes());
 }
 
+/// The hash a shader's meta records for its SPIR-V. The pixel shaders that read FragCoord minus
+/// the jitter (Shader::Info::JitteredFragCoord) record a marked one: their SPIR-V saved before
+/// they did fails the comparison and is translated again at its own number. Every other saved
+/// shader and pipeline stays valid (no version change).
+static u64 RecordedSpirvHash(u64 spv_hash, const Shader::Info& info) {
+    return info.JitteredFragCoord() ? spv_hash ^ 0x6a69747465726564ull : spv_hash;
+}
+
 void RegisterShaderMeta(const Shader::Info& info,
                         const std::optional<Shader::Gcn::FetchShaderData>& fetch_shader_data,
                         const Shader::StageSpecialization& spec, size_t perm_hash,
@@ -627,7 +635,7 @@ void RegisterShaderMeta(const Shader::Info& info,
 
     meta.Write(perm_hash);
     meta.Write(perm_idx);
-    meta.Write(spv_hash);
+    meta.Write(RecordedSpirvHash(spv_hash, info));
 
     spec.Serialize(ar);
     info.Serialize(ar);
@@ -856,7 +864,7 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage) 
     Storage::DataBase::Instance().Load(Storage::BlobType::ShaderBinary,
                                        fmt::format("{:#018x}_{}", program->info.pgm_hash, perm_idx),
                                        spv);
-    if (spv.empty() || SpirvHash(spv) != spv_hash) {
+    if (spv.empty() || RecordedSpirvHash(SpirvHash(spv), program->info) != spv_hash) {
         return false;
     }
 
@@ -936,7 +944,7 @@ void PipelineCache::LoadSavedPermutations(Program& program, u64 hash) {
         if (!SessionLocal(program.info.hw_stage, spec)) {
             std::vector<u32> spv;
             db.Load(Storage::BlobType::ShaderBinary, fmt::format("{:#018x}_{}", hash, idx), spv);
-            if (!spv.empty() && SpirvHash(spv) == spv_hash) {
+            if (!spv.empty() && RecordedSpirvHash(SpirvHash(spv), program.info) == spv_hash) {
                 const auto patch = GetShaderPatch(hash, program.info.hw_stage, idx, "spv");
                 module = CompileSPV(patch && EmulatorSettings.IsPatchShaders() ? *patch : spv,
                                     instance.GetDevice());
@@ -1236,7 +1244,8 @@ void PipelineCache::ReadWarmEntry(BackgroundWarmup& warm, std::vector<u8>&& data
                             fmt::format("{:#018x}_{}", stage->program->info.pgm_hash,
                                         stage->perm_idx),
                             spv);
-                    if (!spv.empty() && SpirvHash(spv) == spv_hash) {
+                    if (!spv.empty() &&
+                        RecordedSpirvHash(SpirvHash(spv), stage->program->info) == spv_hash) {
                         const auto module_started = std::chrono::steady_clock::now();
                         stage->module = CompileSPV(spv, stage->device);
                         module_time = ElapsedNs(module_started);

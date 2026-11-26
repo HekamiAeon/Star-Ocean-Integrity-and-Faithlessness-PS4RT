@@ -68,6 +68,8 @@ enum : std::uint64_t {
     // On by default (bit set: off): history of a thin feature this jitter phase missed is kept
     // when nothing moves. Static-camera flicker of railings/window bars p99.9 -45% (2026-10-03).
     TaaKeepNearerHistory = 1ull << 55,
+    /// The game's light passes read FragCoord minus the upscaler jitter (Rasterizer::ScreenPassJitter).
+    ScreenPassJitter = 1ull << 56,
     SceneMipBias = 1ull << 57, ///< negative LOD bias of G-buffer samplers at reduced scene sizes
     /// A texture/storage request for the top rows of a cached image (same address and layout)
     /// uses that image, instead of creating and uploading a new one (texture_cache.cpp).

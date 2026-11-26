@@ -248,7 +248,21 @@ struct PushData {
     std::array<u32, NUM_USER_DATA_REGS> ud_regs;
     std::array<u8, NUM_BUFFERS> buf_offsets;
     u32 motion_param; ///< ps4rt: object motion parameter index (0: off)
-    u32 scene_size; ///< reduced width | height << 16; zero means native pixel coordinates
+    /// Reduced width | height << 16; zero means native pixel coordinates. With JitterFlag set it
+    /// holds this draw's upscaler jitter instead (PackJitter), subtracted from FragCoord.
+    u32 scene_size;
+
+    static constexpr u32 JitterFlag = 1u << 31; // reduced heights stay below 1 << 15
+    static constexpr u32 JitterBits = 15;
+    static constexpr u32 JitterSteps = (1u << JitterBits) - 2; // even: zero jitter is exact
+    /// Jitter in pixels (-0.5 to 0.5 per axis) as (jitter + 0.5) * JitterSteps per axis.
+    static constexpr u32 PackJitter(float x, float y) {
+        const auto step = [](float value) {
+            const float clamped = value < -0.5f ? 0.0f : value > 0.5f ? 1.0f : value + 0.5f;
+            return u32(clamped * float(JitterSteps) + 0.5f);
+        };
+        return JitterFlag | step(x) | step(y) << JitterBits;
+    }
 
     void AddOffset(u32 binding, u32 offset) {
         ASSERT(offset < 256 && binding < buf_offsets.size());

@@ -133,8 +133,23 @@ Id EmitGetAttribute(EmitContext& ctx, IR::Attribute attr, u32 comp, u32 index) {
         const Id native = ctx.ConstU32(comp == 0 ? 1920u : 1080u);
         const Id safe = ctx.OpSelect(ctx.U32[1],
             ctx.OpIEqual(ctx.U1[1], dimension, ctx.u32_zero_value), native, dimension);
-        return ctx.OpFMul(ctx.F32[1], value, ctx.OpFDiv(ctx.F32[1],
+        const Id logical = ctx.OpFMul(ctx.F32[1], value, ctx.OpFDiv(ctx.F32[1],
             ctx.OpConvertUToF(ctx.F32[1], native), ctx.OpConvertUToF(ctx.F32[1], safe)));
+        if (!ctx.info.JitteredFragCoord()) {
+            return logical;
+        }
+        // ps4rt: the game's light passes get the draw's jitter in place of the size
+        // (PushData::PackJitter, Rasterizer::ScreenPassJitter) and read FragCoord minus it.
+        const Id jittered = ctx.OpINotEqual(ctx.U1[1],
+            ctx.OpBitwiseAnd(ctx.U32[1], packed, ctx.ConstU32(PushData::JitterFlag)),
+            ctx.u32_zero_value);
+        const Id steps = ctx.OpBitFieldUExtract(ctx.U32[1], packed,
+            ctx.ConstU32(comp * PushData::JitterBits), ctx.ConstU32(PushData::JitterBits));
+        const Id jitter = ctx.OpFSub(ctx.F32[1],
+            ctx.OpFDiv(ctx.F32[1], ctx.OpConvertUToF(ctx.F32[1], steps),
+                       ctx.Constant(ctx.F32[1], float(PushData::JitterSteps))),
+            ctx.Constant(ctx.F32[1], 0.5f));
+        return ctx.OpSelect(ctx.F32[1], jittered, ctx.OpFSub(ctx.F32[1], value, jitter), logical);
     }
     case IR::Attribute::TessellationEvaluationPointU:
         return ctx.OpLoad(ctx.F32[1],
