@@ -39,6 +39,12 @@ void runtime_set_procparam(void *param);
 int runtime_resolution_parse(const char *text, uint32_t *width, uint32_t *height);
 uint64_t runtime_resolution_heap_bytes(uint32_t width, uint32_t height);
 int runtime_resolution_apply(unsigned char *image, uint64_t image_size);
+/* Star Ocean: graphics quality (see runtime_quality.c). parse: 0 max (or none), 1 high, 2 low, -1
+ * for anything else. apply: the quality whose shadow map limit was written, 0 when nothing was
+ * (a refused request is then cleared from the environment). Called before the renderer starts. */
+int runtime_quality_parse(const char *text);
+uint32_t runtime_quality_shadow_limit(int quality);
+int runtime_quality_apply(unsigned char *image, uint64_t image_size);
 void **runtime_application_heap_api(void);
 uintptr_t runtime_thread_resolve(const char *name);
 uintptr_t runtime_fiber_resolve(const char *name);

@@ -111,6 +111,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.stale_readback = i != 0;
     } else if (key == "anisotropy") {
         v.anisotropy = Ps4RtGraphics::ParseAnisotropy(i);
+    } else if (key == "graphics_quality") {
+        v.graphics_quality = Ps4RtGraphics::ParseQuality(value);
     } else if (key == "vibration") {
         v.vibration = value.empty() ? 100 : std::clamp(i, 0, 100);
     } else if (key == "restart_unconfirmed") {
@@ -229,6 +231,19 @@ void Load() {
     v.startup_deferred_readback = v.deferred_readback;
     v.startup_stale_readback = v.stale_readback;
     v.startup_anisotropy = v.anisotropy;
+    // The graphics quality of this launch (PS4RT_SO_QUALITY from ps4rt_launch.py, the value the
+    // runtime changed the game's code for before this library started). Without it the game runs
+    // as shipped: a saved High or Low is then only a pending change. A request the runtime had to
+    // refuse leaves PS4RT_SO_QUALITY_PROBLEM: the launch runs at Max and nothing is pending.
+    v.startup_graphics_quality = Ps4RtGraphics::QualityMax;
+    v.graphics_quality_problem = false;
+    if (const char* quality = std::getenv("PS4RT_SO_QUALITY"); quality && quality[0]) {
+        v.startup_graphics_quality = Ps4RtGraphics::ParseQuality(quality);
+        v.graphics_quality = v.startup_graphics_quality;
+    } else if (const char* problem = std::getenv("PS4RT_SO_QUALITY_PROBLEM"); problem && problem[0]) {
+        v.graphics_quality_problem = true;
+        v.graphics_quality = Ps4RtGraphics::QualityMax;
+    }
     // The console language this launch really uses (after ps4rt_launch.py applied any pending
     // choice). The ini's language= key is only a pending change for the launcher, never read here.
     const char* choices = std::getenv("PS4RT_LANGUAGE_CHOICES");
@@ -245,7 +260,8 @@ bool GraphicsNeedRestart() {
            v.engine_fps != v.startup_engine_fps ||
            v.deferred_readback != v.startup_deferred_readback ||
            v.stale_readback != v.startup_stale_readback ||
-           v.anisotropy != v.startup_anisotropy;
+           v.anisotropy != v.startup_anisotropy ||
+           v.graphics_quality != v.startup_graphics_quality;
 }
 
 void SetSceneUpscaler(int selected, bool object_motion) {
@@ -358,6 +374,9 @@ void Save() {
                  v.engine_fps.load(), int(v.deferred_readback.load()), int(v.stale_readback.load()),
                  int(v.restart_unconfirmed.load()));
     std::fprintf(file, "anisotropy=%d\nvibration=%d\n", v.anisotropy.load(), v.vibration.load());
+    std::fprintf(file, "graphics_quality=%s\n",
+                 Ps4RtGraphics::QualityKeys[std::clamp(v.graphics_quality.load(), 0,
+                                                       int(Ps4RtGraphics::QualityCount) - 1)].data());
     std::fprintf(file, "spatial_aa=%d\n", int(v.spatial_aa.load()));
     // Pending game language for ps4rt_launch.py (a PS4 system language ID); -1 keeps the
     // console language the game already uses.

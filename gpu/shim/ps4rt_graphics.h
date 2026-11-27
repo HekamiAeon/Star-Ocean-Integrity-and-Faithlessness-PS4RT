@@ -90,6 +90,17 @@ inline int ParseAnisotropy(int value) {
     return IndexOf(Anisotropies, value, -1) >= 0 ? value : 0;
 }
 
+/// Graphics quality for slower GPUs, applied on restart. Max is the game's own rendering. High
+/// limits the game's shadow maps to 1024 a side and Low to 512 (src/runtime_quality.c); Low also
+/// leaves out the ambient occlusion passes (star_ocean_quality.h).
+enum Quality : int { QualityMax = 0, QualityHigh = 1, QualityLow = 2, QualityCount };
+inline constexpr std::array<std::string_view, QualityCount> QualityKeys = {"max", "high", "low"};
+inline constexpr std::array<const char*, QualityCount> QualityNames = {"Max (original)", "High", "Low"};
+/// Index into QualityKeys; unknown text is Max.
+inline int ParseQuality(std::string_view text) {
+    return IndexOf(QualityKeys, text, int(QualityMax));
+}
+
 /// Frames the GPU command thread may queue ahead of the GPU; 0 = unbounded.
 inline constexpr std::array<int, 3> FramesQueued = {1, 2, 0};
 inline int ParseFramesQueued(int value) {

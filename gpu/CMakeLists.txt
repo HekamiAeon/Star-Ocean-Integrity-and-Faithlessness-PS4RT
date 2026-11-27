@@ -279,6 +279,10 @@ target_include_directories(display-buffers-test PRIVATE shadps4)
 target_compile_options(display-buffers-test PRIVATE -UNDEBUG -pthread)
 target_link_options(display-buffers-test PRIVATE -pthread)
 add_test(NAME display-buffers COMMAND display-buffers-test)
+add_executable(star-ocean-quality-test EXCLUDE_FROM_ALL ../tests/test_star_ocean_quality.cpp)
+target_include_directories(star-ocean-quality-test PRIVATE shadps4 shim)
+target_compile_options(star-ocean-quality-test PRIVATE -UNDEBUG)
+add_test(NAME star-ocean-quality COMMAND star-ocean-quality-test)
 
 # Local achievements (adapted from the Code Fairy port): the shared service and its
 # overlay navigation need no graphics device, guest process or original game files.

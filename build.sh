@@ -23,11 +23,13 @@ if [[ ${1:-} == --test ]]; then
         cpu-image-writeback-test color-export-test image-subresource-test pool-reuse-test wide-screen-test gpu-workarounds-test \
         camera-layout-test scene-camera-history-test menu-input-test menu-sounds-test graphics-settings-test \
         pipeline-binary-policy-test achievements-test achievements-ui-test repeated-targets-test \
-        screen-pass-jitter-test guest-reads-test display-buffers-test
+        screen-pass-jitter-test guest-reads-test display-buffers-test star-ocean-quality-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc \
         tests/test_content.c src/runtime_content.c -o out/content-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" -I. -Isrc \
         tests/test_runtime_resolution.c -lm -o out/runtime-resolution-test
+    "$compiler" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" -I. -Isrc \
+        tests/test_runtime_quality.c -o out/runtime-quality-test
     "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc \
         tests/test_pad_input.c "${libraries[@]}" -o out/pad-input-test
     ctest --test-dir out/gpu --output-on-failure

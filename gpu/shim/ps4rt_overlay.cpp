@@ -371,6 +371,21 @@ void LanguageRow() {
               "Voices are not changed. Applies after restarting the game.");
 }
 
+// Graphics quality, the same row in both menu layouts. The runtime applies it while the game
+// loads; when it had to refuse (another game build) the launch runs at Max and the row says so.
+void QualityRow() {
+    auto& s = Ps4RtSettings::Get();
+    ImGui::BeginDisabled(s.graphics_quality_problem);
+    ChoiceRow("Graphics quality", s.graphics_quality, Ps4RtGraphics::QualityNames.data(), nullptr,
+              Ps4RtGraphics::QualityCount,
+              s.graphics_quality_problem
+                  ? "Not available for this game build: the game runs at Max (original)."
+                  : "For slower GPUs. High draws lower resolution shadows. Low draws them lower still and "
+                    "leaves out ambient occlusion: about 10% and 25% faster on integrated graphics. "
+                    "Applies after restarting the game.");
+    ImGui::EndDisabled();
+}
+
 void GameTab() {
     auto& s = Ps4RtSettings::Get();
     if (s.startup_language >= 0 && !GameLanguages().ids.empty()) {
@@ -463,6 +478,7 @@ void CompactGraphics() {
         ChoiceRow("Anisotropic filtering", s.anisotropy, anisotropy_labels,
                   Ps4RtGraphics::Anisotropies.data(), int(Ps4RtGraphics::Anisotropies.size()),
                   "Sharpens textures viewed at an angle. Works with FSR. Applies after restarting the game.");
+        QualityRow();
         Row("Sharpening");
         int strength = s.sharpen ? int(s.sharpness * 100.0f + 0.5f) : 0;
         if (ImGui::SliderInt("##value", &strength, 0, 100, "%d%%")) {
@@ -562,6 +578,7 @@ void PerformanceTab() {
         ResolutionChoice("##value", s.render_resolution);
         Help("The resolution the game renders at; requires a restart.");
         ImGui::PopID();
+        QualityRow();
         static const char* const engine_labels[] = {"60 (original)", "120", "240"};
         ChoiceRow("Engine frame rate", s.engine_fps, engine_labels, G::EngineFps.data(), int(G::EngineFps.size()),
                   "The highest frame rate the game itself runs at.");
@@ -638,7 +655,8 @@ int RestartChanges() {
     const auto& s = Ps4RtSettings::Get();
     return (s.render_resolution != s.startup_render_resolution) + (s.engine_fps != s.startup_engine_fps) +
            (s.deferred_readback != s.startup_deferred_readback) + (s.stale_readback != s.startup_stale_readback) +
-           (s.anisotropy != s.startup_anisotropy) + (s.language != s.startup_language);
+           (s.anisotropy != s.startup_anisotropy) + (s.language != s.startup_language) +
+           (s.graphics_quality != s.startup_graphics_quality);
 }
 
 // Render game art only within the settings window, below all its controls.

@@ -715,6 +715,7 @@ int main(int argc, char **argv) {
         printf("STOP: this CPU lacks %s and no rewrite table matches the image\n", missing);
         return 20;
     }
+    runtime_quality_apply(image, size); /* before the renderer reads what this launch runs at */
     if (!cpu_only) {
         char title[128]="PS4RT", serial[16]="UNKNOWN", sfo[4096];
         uint32_t attributes=0;

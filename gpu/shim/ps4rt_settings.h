@@ -97,6 +97,15 @@ struct Values {
     /// Ps4RtGraphics::Anisotropies; the samplers read startup_anisotropy.
     std::atomic<int> anisotropy{0};
     int startup_anisotropy = 0;
+    /// Graphics quality (Ps4RtGraphics::Quality) for slower GPUs: High and Low limit the game's
+    /// shadow maps (src/runtime_quality.c) and Low leaves out ambient occlusion
+    /// (star_ocean_quality.h). The game's code is changed while it loads, so a change applies at
+    /// the next launch; startup_graphics_quality is what this launch runs at (PS4RT_SO_QUALITY).
+    std::atomic<int> graphics_quality{0};
+    int startup_graphics_quality = 0;
+    /// The runtime could not apply the saved High or Low (the game's code is not the build the
+    /// option was made for): the launch runs at Max and the menu's row says so.
+    bool graphics_quality_problem = false;
     /// Game language: the emulated console (PS4 system) language ID this launch started with
     /// (ps4rt_launch.py sets PS4RT_LANGUAGE and the offered PS4RT_LANGUAGE_CHOICES); -1 when the
     /// launcher offers no choice. A different selection is only a pending change (ps4rt.ini

@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
+#include <string>
 #include <unistd.h>
 #include "ps4rt_graphics.h"
 #include "ps4rt_settings.h"
@@ -20,7 +21,8 @@ int main() {
     setenv("PS4RT_CONFIG", path, 1);
     for (const char* key : {"PS4RT_UPSCALER", "PS4RT_OUTPUT_RES", "PS4RT_RCAS",
                             "PS4RT_OBJECT_MOTION", "PS4RT_JITTER",
-                            "PS4RT_ASYNC_SHADERS", "PS4RT_SO_RESOLUTION"}) unsetenv(key);
+                            "PS4RT_ASYNC_SHADERS", "PS4RT_SO_RESOLUTION", "PS4RT_SO_QUALITY",
+                            "PS4RT_SO_QUALITY_PROBLEM"}) unsetenv(key);
     auto& s = Get();
     Load();
     assert(s.native_scene && s.CompactGraphicsMenu());
@@ -155,6 +157,70 @@ int main() {
     s.output_res = OutputNative;
     s.render_resolution = 0; // the sections below start from the game's own size
     Save();
+    // Graphics quality: a fresh config is Max. The saved choice is only a pending change until
+    // the launcher passes it on (PS4RT_SO_QUALITY, what the runtime changed the game for): the
+    // launch then runs at that quality and the menu shows it.
+    {
+        namespace G = Ps4RtGraphics;
+        const auto ini_quality = [&] {
+            FILE* file = std::fopen(path, "r");
+            assert(file);
+            char line[256], value[32] = "";
+            while (std::fgets(line, sizeof(line), file)) std::sscanf(line, "graphics_quality=%31s", value);
+            std::fclose(file);
+            return std::string(value);
+        };
+        assert(G::ParseQuality("max") == G::QualityMax && G::ParseQuality("high") == G::QualityHigh &&
+               G::ParseQuality("low") == G::QualityLow);
+        assert(G::ParseQuality("") == G::QualityMax && G::ParseQuality("Low") == G::QualityMax &&
+               G::ParseQuality("2") == G::QualityMax);
+        assert(s.graphics_quality == G::QualityMax && s.startup_graphics_quality == G::QualityMax);
+        assert(ini_quality() == "max" && !GraphicsNeedRestart());
+        for (int quality : {int(G::QualityLow), int(G::QualityHigh)}) {
+            const char* key = G::QualityKeys[quality].data();
+            s.graphics_quality = quality;
+            assert(GraphicsNeedRestart());
+            Save();
+            assert(ini_quality() == key);
+            // Read back without the launcher's value: still pending, the launch runs at Max.
+            s.graphics_quality = G::QualityMax;
+            Load();
+            assert(s.graphics_quality == quality && s.startup_graphics_quality == G::QualityMax);
+            assert(GraphicsNeedRestart());
+            // The next start through the launcher.
+            setenv("PS4RT_SO_QUALITY", key, 1);
+            Load();
+            assert(s.graphics_quality == quality && s.startup_graphics_quality == quality);
+            assert(!GraphicsNeedRestart());
+            unsetenv("PS4RT_SO_QUALITY");
+        }
+        // A value from the caller that differs from the saved one is what the launch runs at.
+        setenv("PS4RT_SO_QUALITY", "low", 1);
+        Load();
+        assert(s.graphics_quality == G::QualityLow && s.startup_graphics_quality == G::QualityLow);
+        setenv("PS4RT_SO_QUALITY", "ultra", 1); // not a quality: Max, as the runtime treats it
+        Load();
+        assert(s.graphics_quality == G::QualityMax && s.startup_graphics_quality == G::QualityMax);
+        unsetenv("PS4RT_SO_QUALITY");
+        // A saved Low the runtime had to refuse (another game build): it cleared the request and
+        // left the marker. The launch runs at Max, the menu says so and nothing is pending.
+        s.graphics_quality = G::QualityLow;
+        Save();
+        setenv("PS4RT_SO_QUALITY_PROBLEM", "1", 1);
+        Load();
+        assert(s.graphics_quality_problem && s.graphics_quality == G::QualityMax &&
+               s.startup_graphics_quality == G::QualityMax && !GraphicsNeedRestart());
+        unsetenv("PS4RT_SO_QUALITY_PROBLEM");
+        Load();
+        assert(!s.graphics_quality_problem && s.graphics_quality == G::QualityLow && GraphicsNeedRestart());
+        s.graphics_quality = 99; // never written out of range
+        Save();
+        assert(ini_quality() == "low");
+        s.graphics_quality = G::QualityMax;
+        Save();
+        Load();
+        assert(s.graphics_quality == G::QualityMax && ini_quality() == "max" && !GraphicsNeedRestart());
+    }
     // Game language (ps4rt_launch.py protocol): the env carries the active console language;
     // ps4rt.ini only ever carries a pending change, never read back by Load().
     const auto ini_language = [&] {

@@ -60,6 +60,29 @@ def _internal_resolution(ini: Path, env: dict) -> None:
         env['PS4RT_SO_RESOLUTION_FROM_INI'] = '1'
 
 
+# The graphics quality choices of the menu (gpu/shim/ps4rt_graphics.h QualityKeys). 'max' is the
+# game as shipped and needs nothing; for the others the runtime limits the game's shadow maps
+# (src/runtime_quality.c) and the renderer reads the same value.
+GRAPHICS_QUALITIES = ('high', 'low')
+
+
+def _graphics_quality(ini: Path, env: dict) -> None:
+    """Pass the saved graphics quality to the runtime (applied on restart).
+
+    Like the internal resolution: an explicit PS4RT_SO_QUALITY from the caller wins, and a value
+    this launcher took from the ini on an earlier launch is dropped so the newly saved choice
+    applies.
+    """
+    if env.pop('PS4RT_SO_QUALITY_FROM_INI', None):
+        env.pop('PS4RT_SO_QUALITY', None)
+    if 'PS4RT_SO_QUALITY' in env:
+        return
+    quality = (_ini_value(ini, 'graphics_quality') or '').strip().lower()
+    if quality in GRAPHICS_QUALITIES:
+        env['PS4RT_SO_QUALITY'] = quality
+        env['PS4RT_SO_QUALITY_FROM_INI'] = '1'
+
+
 def _language_id(text) -> int | None:
     """A PS4 system language ID, or None for anything else."""
     try:
@@ -258,6 +281,7 @@ def main(argv=None) -> int:
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
     _internal_resolution(out / 'ps4rt.ini', env)
+    _graphics_quality(out / 'ps4rt.ini', env)
     # Before the trophy catalog: trophy text follows the console language.
     _console_language(user_dir, out / 'ps4rt.ini', env)
     _achievements(title_id, game, user_dir, env)

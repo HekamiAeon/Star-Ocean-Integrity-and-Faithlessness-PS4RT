@@ -12,8 +12,10 @@
 #include "video_core/renderer_vulkan/star_ocean_fill.h"
 #include "video_core/renderer_vulkan/star_ocean_layers.h"
 #include "video_core/renderer_vulkan/star_ocean_movie.h"
+#include "video_core/renderer_vulkan/star_ocean_quality.h"
 #include "ps4rt_toggles.h"
 #include "ps4rt_gpu_workarounds.h"
+#include "ps4rt_graphics.h"
 #include "ps4rt_settings.h"
 #include "video_core/texture_cache/ps4rt_transition.h"
 
@@ -1689,6 +1691,25 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     }
     UpdateDynamicState(pipeline, is_indexed);
     wide_viewport = {};
+    // Low graphics quality: the ambient occlusion passes are left out and their result reads as
+    // open (star_ocean_quality.h).
+    vk::Extent2D occlusion_open{};
+    if (Ps4RtSettings::Get().startup_graphics_quality == Ps4RtGraphics::QualityLow &&
+        (pipeline->GetGraphicsKey().mrt_mask & 1) && cb_descs[0].first) {
+        using namespace Vulkan::StarOceanQuality;
+        const auto& target = texture_cache.GetImage(cb_descs[0].first).info;
+        const Occlusion step =
+            Step(true, target.pixel_format == vk::Format::eR8Unorm, bool(db_desc.first), regs.num_indices,
+                 target.size.width, SceneResolution::game_scene.width);
+        if (step == Occlusion::Skip) {
+            ResetBindings(false); // as after a draw: its textures and targets are bound by now
+            return;
+        }
+        if (step == Occlusion::Open) {
+            occlusion_open = vk::Extent2D{std::min<u32>(state.width, target.size.width),
+                                          std::min<u32>(state.height, target.size.height)};
+        }
+    }
     scheduler.BeginRendering(state);
 
     const auto& vs_info = pipeline->GetStage(Shader::SwStage::Vertex);
@@ -1702,6 +1723,16 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     const u32 first_vertex = vertex_offset;
     const u32 first_instance = instance_offset;
     scheduler.Record([=](vk::CommandBuffer cmdbuf) {
+        if (occlusion_open.width) {
+            const vk::ClearAttachment open{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .colorAttachment = 0,
+                .clearValue = vk::ClearValue{vk::ClearColorValue{std::array<float, 4>{1, 1, 1, 1}}},
+            };
+            const vk::ClearRect all{.rect = {{0, 0}, occlusion_open}, .baseArrayLayer = 0, .layerCount = 1};
+            cmdbuf.clearAttachments(open, all);
+            return;
+        }
         if (side_bars) {
             const vk::ClearAttachment clear{
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
