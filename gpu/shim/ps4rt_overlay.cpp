@@ -726,7 +726,7 @@ void Menu() {
     // ps4rt: the game's own title (param.sfo), not a fixed one.
     static const std::string heading = [] {
         const std::string_view title = Common::ElfInfo::Instance().Title();
-        return std::string(title.empty() ? "PS4RT" : title) + PadText("  (Insert / R3+L2)", "  (Insert / RS+LT)", "  (Insert / RS+ZL)");
+        return std::string(title.empty() ? "PS4RT" : title);
     }();
     if (!ImGui::Begin(heading.c_str(), &keep_open, ImGuiWindowFlags_NoCollapse |
             (s.CompactGraphicsMenu() ? ImGuiWindowFlags_NoResize : 0))) {
