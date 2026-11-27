@@ -1,7 +1,7 @@
-# Star Ocean 5: Integrity and Faithlessness — PS4RT for PC Linux Port
+# Star Ocean: Integrity and Faithlessness (PS4, CUSA03219): PS4RT for PC Linux Port
 
-An experimental, game-specific Linux compatibility runtime for **Star Ocean: Integrity and Faithlessness**
-(PlayStation 4, **CUSA03219**), tested on **Fedora Linux, x86-64**.
+A game-specific Linux compatibility runtime for **Star Ocean: Integrity and Faithlessness**
+(PlayStation 4, **CUSA03219**), tested on **Fedora Linux and Steam Deck, x86-64**.
 
 PS4RT prepares and runs the game's original x86-64 code on a Linux host, supplies
 compatibility implementations of the PS4 services it needs, and uses a Vulkan
@@ -13,100 +13,146 @@ game.
   <img src="docs/images/readme/sample.png" alt="Star Ocean: Integrity and Faithlessness running on Linux with PS4RT" width="900">
 </p>
 
-**No game files, firmware, or decryption tools are supplied.** You must provide
-your own extracted, plaintext CUSA03219 game folder. The launcher does not
-download games, decrypt encrypted packages, or connect to PSN. This project is
-not affiliated with Square Enix, Sony, or AMD.
+**No game files, firmware, PKGs, decryption keys, or saves are supplied.** You
+must provide your own extracted, plaintext **CUSA03219** game folder. The
+portable does not download games or connect to PSN. This project is not
+affiliated with Square Enix, Sony, or AMD.
 
 ## Download and play (no compiling required)
 
-**Want to play the game? Use the prebuilt Linux release. You do not need to compile PS4RT or install FFmpeg, SDL3, or other bundled application libraries.**
+**Want to play? Use the prebuilt Linux release. You do not need to compile
+PS4RT or install FFmpeg, SDL3, or other bundled application libraries.**
 
-1. **Download:** Open the [v1.2 GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) and download the **`star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`** file. The separately named **`star-ocean-5-ps4rt-source-7010cc2.tar.gz`** archive is for developers. v1.2 supersedes v1.1; earlier versions remain available for rollback.
-2. **Have your own extracted PS4 game:** The launcher needs an already extracted, plaintext **`CUSA03219` folder** containing `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and the game's data. **Point to the CUSA03219 folder itself**, not the PKG, not its parent directory, and not the `eboot.bin` file.
-3. **Extract the Linux download** (using your file manager's Extract option, or the commands below).
-4. **Launch the game** using the command below, replacing the example game path with the real location of your `CUSA03219` folder:
+1. **Download v1.2:** Use the [Star Ocean: Integrity and Faithlessness PS4RT v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) (also the [latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest)). Download **`star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`** to play; the `source` archive is for developers. The superseded v1.1 release remains available for rollback.
+2. **Have your own extracted PS4 game:** The launcher needs a plaintext **`CUSA03219` folder** containing `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and the game's data. Point to **the CUSA03219 folder itself**, not a PKG, its parent folder, or `eboot.bin`.
+3. **Extract the downloaded archive** using your file manager. Open a terminal inside its extracted folder.
+4. **Launch** with the path to your extracted `CUSA03219` folder:
 
 ```bash
-tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
-cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
 bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
 
-On later launches, the validated game folder is remembered, so run `bash Play-Game.sh` without an argument. Explicit `--game` always takes priority and updates the remembered location. `Play-Star-Ocean.sh` remains a compatibility alias for existing shortcuts.
+**After a successful first setup**, the validated game folder is remembered inside the portable. For future launches, simply run `bash Play-Game.sh`. Supply `--game` again if you move the extracted folder or want to select a different copy. The `Play-Star-Ocean.sh` command from previous versions remains as an alias for existing shortcuts.
 
-**That's it.** There is no `LD_LIBRARY_PATH` setup, and no need to compile the game.
+**That's all you need to begin setup.** Keep the extracted release folder
+together and writable. Paths containing spaces must be inside quotes, as
+shown. The first run prepares the game's working files inside the portable;
+your extracted game folder is read, not modified.
 
-Leave the extracted release folder together. The first launch creates local working data under `out/CUSA03219/` by default; your game extraction is read rather than overwritten. Quote paths containing spaces. If no valid game folder is configured, the launcher prints an example `--game` command and refers you to `PLAYER_README.txt`. No graphical folder picker or Tkinter installation is needed. The optional `--data-dir` selects a different private data directory, which must be supplied again on later launches.
+**Graphics are controlled in-game.** Hold **L2** and click the right stick
+(**R3**) to open PS4RT settings, or press **Insert** on a keyboard. Use the
+D-pad to navigate, Cross to confirm, and Circle to go back. Choose output
+**Internal resolution** (16:9 or experimental ultrawide), **FSR Upscale
+output**, upscaling (**Off, FSR 1, FSR 3.1, or FSR 4 v07**, where supported),
+sharpening, anisotropic filtering, and the Star Ocean-specific options below.
 
-**Graphics are controlled in-game.** Hold **L2** and **click the right stick (R3)** to open the graphics settings. On a keyboard, press **Insert**. Choose the resolution (1080p, 1440p, 4K), upscaling (Off, FSR 3.1, or FSR 4 v07 where supported), sharpening, and AF. Use the D-pad, Cross to confirm, and Circle to go back.
+**Internal resolution and FSR output are separate settings.** The game's scene
+can render at 1024×576 (low-end "540p"), 1280×720, 1920×1080, 2560×1440,
+or 3840×2160, plus experimental **21:9, 24:9, and 32:9** modes up to
+5120×1440. **Changing internal resolution requires restarting.** FSR output
+is selected separately, within the same aspect-ratio family; choosing a
+higher output does not change how many pixels the game renders internally.
+FSR 1 is lightweight spatial upscaling without temporal anti-aliasing; FSR 3.1
+and FSR 4 v07 use temporal reconstruction. FSR and its output selection apply
+live where supported.
 
-**You do NOT need to specify FSR or resolution at launch.** Those command-line options are entirely optional. If you prefer, you can start directly with FSR 4 and 4K output:
+**Changing anisotropic filtering (AF) or graphics quality requires restarting
+the game.** Use **Restart Game** in the PS4RT overlay after saving progress.
 
-```bash
-bash Play-Game.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
-```
+**Player requirements:** x86-64 Linux with glibc **2.35 or newer**, Python 3,
+a working Vulkan loader/driver (Vulkan 1.3), and compatible host display/input
+libraries. Required application libraries, including SDL3 and FFmpeg, are
+bundled. No compiler or special `LD_LIBRARY_PATH` command is needed. Fedora
+and Steam Deck gameplay has been verified; other Linux distributions and
+hardware combinations are not all validated.
 
-**IMPORTANT: Changing anisotropic filtering (AF) requires restarting the game.** The other graphics settings above apply without a restart.
+**Architecture support:** The portable targets native **x86-64/AMD64** CPUs.
+ARM64 devices and CPU translation layers such as FEX or Box64 are **not
+supported or validated**.
 
-**Player requirements:** x86-64 Linux with glibc **2.35 or newer**, Python 3, a working Vulkan loader/driver, and compatible host display/input libraries. Required app libraries such as FFmpeg 8 and SDL3 are already in the download. No `LD_LIBRARY_PATH` command is needed. Fedora gameplay has been tested. Steam Deck operation has been reported, but broader independent SteamOS and other-distribution validation remains pending.
-
-**Architecture support:** The prebuilt runtime targets **native x86-64 (AMD64) CPUs only**. ARM64 devices, including Snapdragon-based handhelds running Linux through FEX or Box64, are **not supported or validated**. Such translation layers may start the game, but correct execution and stability are not guaranteed. An ARM-compatible Linux distribution does not remove the CPU translation requirement.
-
-For a more detailed walkthrough, see [Running on Linux](docs/RUNNING_LINUX.md). The download does **not** include PS4 game files or firmware.
+For more help, see [Running on Linux](docs/RUNNING_LINUX.md). The release
+does **not** contain PS4 game files or firmware.
 
 ## Current status
 
-**Experimental and playable through tested early-story sections; not a verified
-full playthrough.** Tested on Fedora with an **AMD Ryzen 7 9700X** CPU and
-**NVIDIA GeForce RTX 3080 Ti** and **AMD Radeon RX 9070 XT-class**
-graphics (the AMD hardware used was a **Radeon AI PRO R9700**). Verified
-gameplay includes the introduction, story cinematics, menus, audio,
-controller input, town exploration, battles, and save/load progression
-through **Chapter 4**.
-4K output with FSR 4 v07 has also been tested. Other hardware
-configurations, Linux distributions, and the full game have not
-been independently verified.
+- SDL-compatible gamepads, including DualSense and XInput, plus keyboard
+  controls.
+- **Internal resolution:** 1024×576, 720p, 1080p, 1440p, and native 4K,
+  plus experimental **21:9 (2560×1080, 3440×1440), 24:9 (3840×1440),
+  and 32:9 (3840×1080, 5120×1440)**. A change requires restarting the game.
+- **FSR Upscale output:** Select the output separately from internal resolution;
+  only compatible same-aspect outputs are offered. Upscaling options are **Off,
+  FSR 1, FSR 3.1, and FSR 4 v07** (GPU support permitting). Higher output
+  resolutions do not necessarily mean the scene is rendered at that size.
+- **Graphics quality (v1.3):** **Max (original)** preserves the game's effects; **High** draws lower-resolution shadows. **Low** draws them lower still and disables ambient occlusion. A change requires restarting the game.
+- **Anisotropic filtering:** Game default, 2×, 4×, 8×, or 16×. AF is separate
+  from anti-aliasing and requires restarting the game.
+- **Custom Star Ocean PS4RT overlay**, with artwork and menu sounds.
+  Open using **Insert** or **L2 + R3 click**. Settings are saved when the
+  overlay closes.
+- **Framerate:** **60 (original)** is the game's own rate and remains the
+  default. **30** locks the game to an even 30 FPS for slower GPUs that
+  cannot hold 60; game speed stays the same. The choice applies live.
+- **Asynchronous compilation:** **ON** (default) gives smoother first-use
+  shader loading, with occasional brief visual flickers. **OFF** gives
+  occasional shader-loading stutters, with more reliable rendering. The
+  setting applies live.
+- **Restart Game:** Closes the current running game and launches it again
+  through the PS4RT launcher.
+- **Local achievements:** Game-triggered trophies are saved locally and shown
+  in the **Achievements** tab with icons, progress, hidden entries, unlock
+  timestamps, and notifications. These are **not synced with PSN**; objectives
+  completed before the feature was added will not unlock retroactively.
+- **Game language:** An overlay dropdown switches the game language
+  between **English and French**. The setting also controls
+  trophy-text localization.
+- **Ultrawide:** The 21:9, 24:9, and 32:9 modes widen the rendered scene but
+  remain **experimental**. Some HUD, dialogue, and cutscene elements may retain
+  16:9 layout assumptions. Return to 16:9 when investigating visual defects.
 
-- SDL-compatible gamepads, including DualSense and XInput, plus keyboard controls.
-- Output at **1080p, 1440p, or 4K**, with **FSR 3.1**, optional **FSR 4 v07**,
-  and sharpening controls.
-- **Anti-aliasing (AA)** is provided through the selected FSR reconstruction
-  mode. Sharpening is a separate image adjustment.
-- **Anisotropic filtering (AF)** is separate from AA: choose Game default,
-  2×, 4×, 8×, or 16×. AF changes require restarting the game.
-- Custom illustrated PS4RT in-game graphics overlay with menu sound effects.
-  Open it with **Insert**, or press **L2 + R3 click**. Navigate with the D-pad,
-  confirm with Cross, and go back with Circle.
-- **Restart Game** in the graphics menu asks for confirmation before restarting. Save in-game progress first; restarting does not create a game save.
-- **Exit Game** in the graphics menu requests confirmation before returning
-  to the Linux desktop. Save your in-game progress first; this action does
-  not trigger an automatic game save.
-- Higher output resolutions use reconstruction/upscaling rather than a claim
-  of native 4K game rendering.
-- Original game frame-rate behavior is retained; no bundled 60 FPS patch or
-  frame-generation gameplay mode is claimed.
 
-FSR 3.1 is available in the runtime. The FSR 4 **v07** shader/model assets
-and their license notice are included in `fsr4_shaders/`; hashes and provenance
-are recorded in `packaging/fsr4-v07-assets.json`. FSR 4 requires compatible
-Vulkan GPU features and otherwise falls back to FSR 3.1. These are **upscaler
-dependencies**, not cached shaders compiled from the game.
+FSR 1 (spatial) and FSR 3.1 (temporal) are available in the runtime. FSR 4
+v07 assets and their license notice are included under `fsr4_shaders/`.
+FSR 4 requires appropriate Vulkan GPU features, including INT8 dot-product
+support; unsupported hardware can use **FSR 3.1, FSR 1, or Off** instead.
+These assets are upscaler dependencies, not shaders extracted from the game.
+
+### Known limitations and bug reports
+
+- **DrawPipeline is unsupported and off by default.** Enabling it may help
+  CPU-limited systems but can cause flickering or missing UI/fade draws.
+  Bug reports must reproduce with DrawPipeline off. To experiment:
+
+```bash
+PS4RT_DRAW_PIPE=1 bash Play-Game.sh --game "/path/to/CUSA03219"
+```
+
+Disable it again with `PS4RT_DRAW_PIPE=0` or leave the variable unset.
+Please use [GitHub Issues](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/issues)
+for reports. Include the chapter/scene and your graphics settings.
 
 ## Build from source (developers only)
 
-**Downloaded the prebuilt Linux release? Skip this section.** The commands below are for contributors compiling PS4RT; players should use the `Play-Game.sh` instructions above.
+**Downloaded the prebuilt Linux release? Skip this section.** The commands
+below are for contributors. Players should use `Play-Game.sh` as shown
+above.
 
-From a source checkout, install a C/C++ toolchain, CMake, Ninja, pkg-config, Python 3, and development packages for Vulkan, SDL3, FFmpeg, fmt, Boost, xxhash, robin-map, Vulkan Memory Allocator, Zydis, glslang, and X11. Included third-party source components are built as needed.
+From a source checkout, install a C/C++ toolchain, CMake 3.24+, Ninja,
+pkg-config, Python 3, glslang, and development packages for Vulkan, SDL3,
+FFmpeg, X11, fmt, Boost, xxHash, robin-map, Zydis, and other source
+dependencies. Exact package names vary by distribution.
 
 ```bash
 PS4RT_LTO=OFF bash build.sh --test
 bash run.sh --game "/path/to/CUSA03219"
 ```
 
-The old source-build commands remain valid on a host that has the required development packages. The `--test` build runs automated tests, not a full gameplay test. Source checkouts prepare private, game-derived files under `out/` without modifying the original game folder. Never commit or distribute `out/`, which can contain game-derived binaries, saves, and GPU caches.
+The test build runs automated tests, not a full playthrough. Source builds
+create generated runtime data under `out/CUSA03219/`.
 
-For creating the glibc 2.35 release binaries with the standardized Ubuntu 22.04 container instead of a host-native source build, see [Linux release build instructions](packaging/linux/README.md) and the [distribution guide](docs/DISTRIBUTING_LINUX.md).
+To create the portable Linux release using the controlled Ubuntu 22.04 /
+GCC 14 / glibc 2.35 builder, see [Linux portable build instructions](packaging/linux/README.md)
+and the [distribution guide](docs/DISTRIBUTING_LINUX.md).
 
 ### Keyboard and controller remapping
 
@@ -114,59 +160,61 @@ Default keyboard controls include **WASD** (left stick), **arrow keys**
 (right stick), **Space** (Cross), **Left Shift** (Circle), **E** (Square),
 **Q** (Triangle), and **I/J/K/L** (D-pad).
 
-You can remap PS4 buttons at launch through `PS4RT_KEY_MAP`:
+You can remap PS4 buttons at launch using `PS4RT_KEY_MAP`:
 
 ```bash
-PS4RT_KEY_MAP="cross=Q,triangle=Space" \
-  bash run.sh --game /path/to/your/CUSA03219
+PS4RT_KEY_MAP="cross=Q,triangle=Space" bash run.sh --game "/path/to/CUSA03219"
 ```
 
-`PS4RT_PAD_MAP` similarly remaps gamepad buttons. These are launch-time
-environment variables, **not keys in `ps4rt.ini`**; there is currently
-no in-game key-binding editor. Default mappings and keyboard stick axes
-are defined in [`src/runtime_pad.c`](src/runtime_pad.c). These button maps
-do not remap the analog stick axes or the PS4RT menu shortcut.
+`PS4RT_PAD_MAP` similarly remaps gamepad buttons. These are environment
+variables, **not settings in `ps4rt.ini`**. There is no in-game
+key-binding editor. The mapping defaults live in
+[`src/runtime_pad.c`](src/runtime_pad.c), and these remaps do not change
+analog axes or the PS4RT menu shortcut.
 
 ### Saves and private files
 
-The source checkout stores generated game code, settings, saves, and GPU
-caches under `out/CUSA03219/`. Notable paths include:
+The source checkout or extracted portable keeps generated game code,
+settings, saves, and GPU caches under `out/CUSA03219/`.
+Notable paths:
 
-- `out/CUSA03219/ps4rt.ini`: saved in-game graphics settings.
-- `out/CUSA03219/game-folder.txt`: remembered validated game directory.
-- `out/CUSA03219/user/savedata/`: game save data.
+- `out/CUSA03219/ps4rt.ini`: saved graphics settings.
+- `out/CUSA03219/user/savedata/`: user save data.
 - `out/CUSA03219/user/savedata-backups/`: save backups, when present.
-- `out/CUSA03219/user/gpu/cache/CUSA03219/`: generated GPU shaders
-  and pipeline caches, when present.
+- `out/CUSA03219/user/achievements/`: local unlock state and generated trophy
+  catalog.
+- `out/CUSA03219/user/gpu/cache/CUSA03219/`: GPU shader/pipeline caches,
+  when present.
 
-Pass `--data-dir "/your/private/path"` to keep working data elsewhere. Use the same option on subsequent launches; it does not move existing saves automatically.
-
-**Never publish the `out/` directory.** Prepared game executables and
-linked data can contain proprietary game material, while savedata and caches
-belong to individual players. None of these belong in source control or
-release archives.
+**Never publish `out/CUSA03219/`.** It can contain game-derived binaries,
+private saves, and caches. No proprietary game material or
+user data belongs in source control or public player archives.
 
 ## Credits, origins, and license
 
 This Star Ocean-specific project is **adapted open-source compatibility
-software**, not a clean-room implementation. Its runtime builds on work from:
+software**, not a clean-room implementation. Its runtime builds on work
+from:
 
-- [FelipePrado0/gow3_pc](https://github.com/FelipePrado0/gow3_pc), the
-  God of War III compatibility-runtime project from which the porting
-  runtime was adapted.
+- [FelipePrado0/gow3_pc](https://github.com/FelipePrado0/gow3_pc),
+  the original PS4 compatibility-runtime lineage.
 - [deadinside28/bloodborne_pc](https://github.com/deadinside28/bloodborne_pc)
   and [Supermedo/bloodborne_pc](https://github.com/Supermedo/bloodborne_pc),
-  earlier Bloodborne PC runtime and launcher lineage.
+  earlier compatibility-runtime and launcher adaptations.
 - [shadPS4](https://github.com/shadps4-emu/shadPS4) and related Vulkan
   renderer and shader-recompiler contributors.
 
-Development also used [REA: Reverse Engineer Anything](https://github.com/morluto/rea)
+Development used [REA: Reverse Engineer Anything](https://github.com/morluto/rea)
 and [Ghidra](https://github.com/NationalSecurityAgency/ghidra) as
-reverse-engineering **analysis tools**, not embedded runtime code.
+reverse-engineering analysis tools, not embedded runtime code.
 
-See [Upstream credits and notices](docs/UPSTREAM_CREDITS.md) for additional
-contributors, source provenance, and third-party licenses. Original authors'
-copyright and license notices remain in the source tree. The project's
-runtime source is distributed under **GPL-2.0-or-later**; vendored components
-retain their respective terms. A separate project name and fresh Git history
-do not change those obligations.
+See [Upstream credits and notices](docs/UPSTREAM_CREDITS.md) for
+additional contributors and third-party licenses. The runtime source is
+distributed under **GPL-2.0-or-later**; vendored components retain their
+own licenses and attribution. The FSR 4 assets have a separate notice at
+[fsr4_shaders/LICENSE-FSR4-v07.txt](fsr4_shaders/LICENSE-FSR4-v07.txt).
+A separate repository name or Git history does not remove obligations
+to upstream contributors.
+
+Star Ocean is a trademark of its respective owners. This project is
+not affiliated with or endorsed by them.

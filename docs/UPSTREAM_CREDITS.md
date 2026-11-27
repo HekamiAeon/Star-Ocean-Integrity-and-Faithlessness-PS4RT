@@ -8,7 +8,7 @@ contributors remain credited here even where their game-specific features were r
 ## Runtime lineage
 
 - [Felipe Prado / gow3_pc](https://github.com/FelipePrado0/gow3_pc): original
-  God of War III PC compatibility-runtime implementation from which the runtime was adapted.
+  PS4 compatibility-runtime implementation from which the runtime was adapted.
 - [deadinside28 / bloodborne_pc](https://github.com/deadinside28/bloodborne_pc):
   earlier runtime lineage.
 - [Supermedo / bloodborne_pc](https://github.com/Supermedo/bloodborne_pc):
@@ -17,6 +17,13 @@ contributors remain credited here even where their game-specific features were r
   emulator video core, GPU drivers and shader-recompiler foundations.
 - [cuesta4 / shadPS4](https://github.com/cuesta4/shadPS4/tree/eltutz):
   related renderer and compatibility contributions.
+
+## Portable dependencies
+
+- [zlib](https://zlib.net/): decompression runtime bundled under the zlib license.
+
+The portable Linux builder uses controlled Ubuntu 22.04/GCC 14 dependencies
+and provides the player binaries plus corresponding licensed source archives.
 
 ## Research and reverse-engineering tools
 
@@ -32,7 +39,7 @@ contributors remain credited here even where their game-specific features were r
 This project retains source-level copyright, SPDX and license notices.
 The project license is [GPL-2.0-or-later](../LICENSE). Adapted files and vendored
 dependencies keep their original license notices under their respective source
-directories. Source builds may link local system dependencies. The Linux v1.2 binary archive bundles audited FFmpeg and other application libraries with independent redistribution terms.
+directories. Host-native developer builds may link against locally installed libraries; the portable release bundles audited application dependencies, including FFmpeg.
 
 FSR-Vulkan/AMD FidelityFX, ImGui, LibAtrac9, Sirit, half, xbyak, miniz, magic_enum,
 DejaVu fonts, and additional vendored libraries retain their own authors and licenses.

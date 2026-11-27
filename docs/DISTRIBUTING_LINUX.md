@@ -1,94 +1,116 @@
-# Star Ocean: Integrity and Faithlessness — Linux distribution guide
+# Star Ocean: Integrity and Faithlessness (CUSA03219): Linux distribution guide
 
-This document explains how to build and distribute the **Star Ocean: Integrity and Faithlessness PS4RT** Linux source release for **CUSA03219**. It is an experimental, game-specific native x86-64 compatibility runtime, adapted from earlier PS4RT projects and the shadPS4 rendering foundation. Original copyright, GPL, and third-party license notices must remain intact.
+This guide covers the **Star Ocean: Integrity and Faithlessness PS4RT** Linux source and portable runtime release for **CUSA03219**. PS4RT is a game-specific native x86-64 compatibility runtime adapted from the earlier PS4RT porting lineage and shadPS4's rendering foundation. Keep the upstream credits, copyright, GPL and third-party notices intact.
 
-**This repository contains the runtime and its licensed dependencies, not the game, its firmware, or decryption tools.** Each player supplies an independently obtained, extracted, plaintext copy of the game.
+**The release contains no PS4 game data, firmware, update/DLC PKGs, decryption keys, or saved games.** Players provide their own extracted, plaintext CUSA03219 directory.
 
 ## For players: download, extract, run
 
-**Do not compile from source to play v1.2.** Download the Linux runtime archive from the [v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2). Choose `star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`, not the source archive.
+**Do not compile from source just to play v1.2.** Download the prebuilt
+[Linux x86-64 runtime archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz) from the
+[official v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2)
+(or visit [the latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest)).
+Choose **`star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`**, not the source archive.
+Download its [SHA256 checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256) alongside it.
 
-Extract the download and open a terminal in the extracted folder:
+Developers can download the separate
+[matching source archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz) and
+[source checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256).
+
+From the folder containing your downloads, verify, extract, and launch:
 
 ```bash
+sha256sum -c star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256
 tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
 cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
 bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
 
-Subsequent launches can use `bash Play-Game.sh` without `--game`; the launcher remembers the validated game location. Use `--game` again if the folder moves. `Play-Star-Ocean.sh` remains a compatibility alias.
+The checksum command needs the runtime archive and its matching `.sha256`
+in the same directory. The `--game` value must be the player's **own extracted plaintext** directory with `eboot.bin`, `sce_sys/param.sfo`, `sce_module/` and game data, not a PKG or parent folder. Preserve quotes around paths containing spaces.
 
-Replace `/path/to/CUSA03219` with the path to **your extracted plaintext game folder**. It must contain `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and game data. Do not supply the PKG, an executable file, or the parent folder.
+For a full walkthrough, see [Linux binary release](LINUX_BINARY_RELEASE.md). No separate compiler, manual SDL3/FFmpeg installation, or GUI toolkit is required for the prebuilt runtime.
 
-**You do not need FFmpeg/SDL3 installation commands or `LD_LIBRARY_PATH`.** The application libraries are bundled. The player still needs glibc 2.35+, Python 3, a compatible Vulkan graphics/display stack, and x86-64 Linux.
+### Platform and gameplay status
 
-**CPU architecture:** The release supports native **x86-64/AMD64** execution. **ARM64 is unsupported**, including ARM Linux systems using FEX, Box64, or similar translation layers. A translator may partially launch the executable, but this does not establish reliable PS4RT gameplay. The system's Linux distribution alone does not determine CPU compatibility.
+The prebuilt runtime targets **native Linux x86-64 / AMD64**, **glibc 2.35+**, Python 3 and a working Vulkan 1.3-capable graphics/display stack. It bundles audited application libraries, including SDL3 and FFmpeg, with relative ELF `$ORIGIN` library paths. ARM64, FEX and Box64 translation are unsupported/unverified.
 
-**FSR and resolution launch arguments are optional.** Hold **L2** and **click R3 (the right stick)**, or press **Insert**, to choose resolution and upscaling in the graphics settings menu. **AF changes require a restart**; the other graphics options apply live. See [Running on Linux](RUNNING_LINUX.md) for details.
+**Fedora with AMD/RADV and NVIDIA graphics** has been gameplay-tested, and the **complete game** has been played through, including first-boot save creation, saving/loading, controller use, cinematics and combat. **Steam Deck** is confirmed working. Not all Linux distributions and GPUs have been exhaustively tested. This is a title-specific runtime, not a general PS4 emulator.
 
-### Building from source is for developers
+In the **current source**, open the PS4RT settings overlay with **Insert** or
+**L2 + R3 click**. Available internal render resolutions span 1024×576 through
+3840×2160 at 16:9 and experimental **21:9, 24:9, and 32:9**, up to 5120×1440.
+Internal resolution changes require restarting. **FSR Upscale output** is
+separate from the internal scene dimensions and restricted to compatible aspect
+ratios. Upscaling options are **Off / FSR 1 / FSR 3.1 / FSR 4 v07**; FSR 1 is a
+lighter spatial option, while FSR 3.1 and FSR 4 use temporal reconstruction.
+FSR 4 requires compatible Vulkan features. The overlay also has a
+restart-required **Graphics quality** choice (Max, High, Low), a
+restart-required **Game language** dropdown (English, French), a local
+**Achievements** page, sharpening, AF, asynchronous compilation, display
+settings and 60 / 30 FPS controls. AF also requires restarting.
+Output resolution alone must not be described as native 4K rendering.
 
-For a conventional host-native source build, install a compiler, CMake, Ninja, pkg-config, Python 3, Vulkan development packages and SDL3, FFmpeg, fmt, Boost, xxhash, robin-map, VMA, Zydis, glslang and X11 development dependencies, then from the repository root:
+### Private user data
+
+| Local path within extracted portable | Contents |
+| --- | --- |
+| `out/CUSA03219/boot-linked.bin`, `content.bin` and related files | Prepared or linked game-derived content |
+| `out/CUSA03219/ps4rt.ini` | Local graphics settings |
+| `out/CUSA03219/user/savedata/` | Game save data |
+| `out/CUSA03219/user/achievements/` | Local trophy unlocks and generated catalog; no PSN synchronization |
+| `out/CUSA03219/user/gpu/cache/` | Shader and pipeline caches |
+
+**Never redistribute** these directories, prepared executables, player saves, shader caches, proprietary game data or other private artifacts. The source and runtime packaging allowlists are intended to omit such data; review the generated archives before publishing.
+
+## For developers: build from source
+
+A conventional development build uses a C11/C++23 toolchain, Python 3, CMake, Ninja, pkg-config, Vulkan/SDL3, FFmpeg, fmt, Boost, xxHash, robin-map, Zydis, glslang and X11 development packages. From the source root:
 
 ```bash
-PS4RT_LTO=OFF bash build.sh --test
+bash build.sh --test
 bash run.sh --game "/path/to/CUSA03219"
 ```
 
-This host-native build links against the **developer's** installed libraries and does not itself produce the standardized release bundle. For a distribution-targeted build, use the automated Ubuntu 22.04/glibc 2.35 pipeline described in [`packaging/linux/README.md`](../packaging/linux/README.md). That container workflow builds the bundled release, and is **not** required by players.
+A host-native development build is **not** the standard redistributable bundle: it may link to libraries installed on that host. For a portable release use the controlled **Ubuntu 22.04 / glibc 2.35** toolchain and the dedicated release scripts documented in [`packaging/linux/README.md`](../packaging/linux/README.md).
 
-### Graphics, controls, and gameplay status
+### Maintainer release workflow
 
-Open the illustrated in-game menu with **Insert**, or press **L2 + R3 click**. Navigate with D-pad, Cross, and Circle (A/B for typical Xbox-style controllers).
+1. Start from a **reviewed, clean Git commit** containing all final source code, guides, licenses, attribution and checksums for bundled assets. The release builder reads **committed Git HEAD**, not uncommitted working files.
+2. Ensure the controlled build image exists. Build it as needed with `bash packaging/linux/build-images.sh`; builders use Podman and are not required by players.
+3. Run `bash packaging/linux/build-runtime.sh` from the committed source root. It stages the private build under `~/Documents/PS4RT-Portable-StarOcean-ubuntu-build/` and prints the bundle path. Then run `python3 tools/package_star_ocean.py` and `python3 tools/package_star_ocean.py --runtime --bundle-from "$BUNDLE"`, which produce **four files** under `out/community/`: the versioned Linux runtime `.tar.gz`, its `.sha256`, the matching source `.tar.gz`, and its `.sha256`.
+4. Validate both checksums and inspect the archive contents for proprietary/private material. Verify the release's embedded source revision, x86-64 ELF architecture, `$ORIGIN` RUNPATHs, glibc baseline, linked dependencies and corresponding-source availability. Verify the archive and exact launcher on a clean host where feasible.
+5. Smoke-test a **freshly extracted portable** with its own `--data-dir`: first-boot save creation, game startup, save/load and restart. Do not use development saves as a shortcut. For the next release, also validate achievements, language changes on restart, 16:9 and experimental ultrawide rendering, and FSR Off / FSR 1 / FSR 3.1 / FSR 4 v07 on supported hardware.
+6. Publish the four assets together under a versioned GitHub Release on [Star Ocean: Integrity and Faithlessness PS4RT](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases). The current [v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) includes the [Linux runtime](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz), its [checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256), the [matching source archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz), and its [checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256). The [superseded v1.1 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.1) remains for rollback. For future releases, keep asset filenames and manifests tied to their own committed release SHA and verify the downloaded checksums.
 
-The compact menu offers 1080p, 1440p, or 4K output; Off / Original, FSR 3.1, or FSR 4 v07; display mode, sharpening, and anisotropic filtering (Game default / 2× / 4× / 8× / 16×). AF requires a restart; resolution, upscaling, and sharpening apply live.
+The packager uses a restricted source export and a checked runtime file manifest. It bundles the Linux `ps4rt` and its `libps4rtgpu.so` renderer, plus audited runtime libraries and licensed graphics resources. No PS4 binaries or developer-local artifacts belong in public archives.
 
-Settings are saved to `out/CUSA03219/ps4rt.ini` when the menu closes. The game retains its original frame-rate behavior. Display reconstruction to 4K does not mean the original 1080p scene is natively rasterized at 4K.
+### Current-source feature verification for the next release
 
-The FSR 3.1 implementation and the bundled, checksum-recorded **FSR 4 v07** resources are part of the source distribution. The `fsr4_shaders/` assets, their license notice, and `packaging/fsr4-v07-assets.json` **must remain with a release that supports FSR 4**. FSR 4 requires suitable Vulkan device capabilities and falls back to FSR 3.1 if unsupported. This release is not FSR 4.1.1.
+- **Achievements:** Confirm the trophy catalog is generated from the user's
+  installed game data, game-triggered unlocks persist across restarts, and
+  the full/compact overlay displays icons, progress and notifications. No
+  PSN synchronization or game-derived trophy assets belong in the archive.
+- **Internal resolution and ultrawide:** Smoke-test 16:9 first, then 21:9,
+  24:9 and 32:9 where practical, including combat, dialogue, HUD, menus,
+  cutscenes and a clean return to 16:9. Label ultrawide **experimental**.
+- **Upscalers:** Exercise **Off, FSR 1, FSR 3.1 and FSR 4 v07** on compatible
+  hardware. Confirm matching FSR outputs and correct HUD composition, with
+  fallbacks on devices where FSR 4 is unsupported.
+- **Language:** Check English and French through the overlay's dropdown,
+  including the required restart and trophy text. Do not advertise Japanese
+  for this build.
+- **Packaging and privacy:** Confirm the portable includes the trophy catalog
+  and crypto helper scripts, necessary runtime files, and license notices,
+  but excludes game PKGs, decrypted ELF/code, saved achievements, extracted
+  trophy artwork and all `out/CUSA03219/` data.
 
-Gameplay testing reached **Chapter 4** on Fedora with an AMD Ryzen 7 9700X, NVIDIA GeForce RTX 3080 Ti, and AMD Radeon AI PRO R9700 (RX 9070 XT-class). The full game and additional Linux hosts have not been exhaustively tested.
+### Licenses, notices and provenance
 
-### User data and privacy
+PS4RT is **adapted open-source software**, not a clean-room reimplementation. Preserve the original copyright, GPL and vendor notices recorded in [Upstream credits and notices](UPSTREAM_CREDITS.md) and the repository's third-party license files. PS4RT runtime source is **GPL-2.0-or-later**; individual components and bundled data retain their own license terms.
 
-Source builds generate output under `out/CUSA03219/`:
+The FSR 4 **v07** shaders/model resources, their notice and `packaging/fsr4-v07-assets.json` checksum manifest must accompany any build advertising FSR 4. The release includes third-party libraries and assets such as FFmpeg, FidelityFX/FSR-Vulkan, ImGui, LibAtrac9, Sirit, half, xbyak, miniz, magic_enum and DejaVu.
 
-| Path | Contains |
-| --- | --- |
-| `out/CUSA03219/boot-linked.bin`, `boot.bin`, `eboot.elf` and similar files | Prepared or linked, game-derived binary data |
-| `out/CUSA03219/ps4rt.ini` | Saved graphics settings |
-| `out/CUSA03219/user/savedata/` and `savedata-backups/` | Player saves and backups |
-| `out/CUSA03219/user/gpu/cache/CUSA03219/` | Generated game shader and pipeline caches |
+**Review the actual FFmpeg build flags and license terms** before binary redistribution. See [FFmpeg legal guidance](https://ffmpeg.org/legal.html) and the [GNU GPL license information](https://www.gnu.org/licenses/). Do not assume host system libraries are safe to copy wholesale into public releases. Check the license/source notices for bundled fonts, interface imagery, menu audio and screenshots separately.
 
-These files are **local and private**. Do not distribute any `out/` contents, PS4 system modules, firmware, screenshots or captures from user directories by accident. The game's original input folder is read rather than copied into the repository. The launcher also remembers the selected game directory under `out/CUSA03219/`. The optional `--data-dir` selects a different private working-data location; reuse that option on subsequent launches. Existing saves are not moved automatically.
-
-To restart, choose **Restart Game** in the overlay and confirm. To exit, choose **Exit Game** and confirm **Exit to desktop**. Save in-game first; changing graphics settings does not save gameplay progress.
-
-## Maintainer instructions
-
-### Source and Linux runtime packages
-
-From the repository root, after committing source changes, run `bash packaging/linux/build-images.sh` once to create the build image if needed. Then run `bash packaging/linux/build-runtime.sh`; it prints the resulting bundle path. Package that bundle with:
-
-~~~bash
-BUNDLE="/absolute/path/printed/by/build-runtime.sh"
-python3 tools/package_star_ocean.py
-python3 tools/package_star_ocean.py --runtime --bundle-from "$BUNDLE"
-(cd out/community && sha256sum -c *.sha256)
-~~~
-
-The source and Linux x86-64 archives keep the original filenames and commit suffix. Runtime packaging uses an allowlist of two tested ELF files and twelve audited shared libraries from the tested build. The separately published source archive contains the corresponding PS4RT source. The player archive excludes the `docs/` tree, game files, linked game code, saves and GPU caches; the required credits and licenses remain available offline.
-
-See [`packaging/linux/README.md`](../packaging/linux/README.md) for build stages, `$ORIGIN` path validation and glibc requirements, and [upstream credits and notices](UPSTREAM_CREDITS.md) for provenance and license information. Independently verify any applicable third-party binary redistribution obligations. Independent Steam Deck testing is still pending.
-
-### License and provenance
-
-PS4RT is **adapted open-source software**, not a clean-room implementation. Retain the credits and original copyright notices for the God of War III and Bloodborne native-port lineage, the shadPS4 renderer, and all vendored components, as recorded in [Upstream credits and notices](UPSTREAM_CREDITS.md).
-
-The runtime source is distributed under **GPL-2.0-or-later**; third-party code and data keep their individual terms. Relevant dependencies include FidelityFX/FSR-Vulkan, ImGui, LibAtrac9, Sirit, half, xbyak, miniz, magic_enum, DejaVu fonts, and others bundled in the source.
-
-FFmpeg licensing obligations depend on the **specific build and linking configuration**. When distributing host binaries or bundled system libraries, inspect the actual FFmpeg build flags, applicable license version, and any corresponding-source obligations. Do not blindly copy system library directories into a tarball. See [FFmpeg legal guidance](https://ffmpeg.org/legal.html) and the [GNU GPL license information](https://www.gnu.org/licenses/).
-
-Review the rights and attribution for the illustrated overlay, bundled menu audio and gameplay screenshot separately before public redistribution. A game-content-free runtime source export does not itself grant permission to redistribute Square Enix or Sony game media, or claim affiliation.
-
-Before announcing a public binary release, perform a final clean-tree audit, test the exact distributed files, verify checksums and dependencies, and publish matching source and license notices. Publication is a separate release decision.
+The project is not affiliated with Square Enix, Sony or AMD, and does not authorize redistribution of the underlying PS4 game or associated media. Publication requires a final source/license audit and verification of the exact release assets.

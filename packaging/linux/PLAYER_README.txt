@@ -1,33 +1,29 @@
 Star Ocean: Integrity and Faithlessness - PS4RT Linux x86-64
 
 FIRST LAUNCH
-Supply your own extracted plaintext PS4 game folder (CUSA03219).
+Supply your own extracted plaintext PS4 game directory (CUSA03219).
 Open a terminal in the extracted player release folder and run:
   bash Play-Game.sh --game "/absolute/path/to/CUSA03219"
 
 SUBSEQUENT LAUNCHES
-After the first successful launch, the validated game location is remembered:
+The launcher remembers the validated game location. Run:
   bash Play-Game.sh
-An explicit --game always overrides and updates the remembered location.
-An invalid or missing game folder causes an error; no picker is used.
+The --game argument remains optional but may be supplied at any time to select
+and remember a different valid CUSA03219 directory.
 
 OPTIONAL PRIVATE DATA DIRECTORY
-Default saves, settings, and prepared game files remain in out/CUSA03219/.
-To use a different private folder for those files:
+To store saves, settings, and prepared data in a different location:
   bash Play-Game.sh --game "/absolute/path/to/CUSA03219" --data-dir "/path/to/private-data"
-Use the same --data-dir on later launches. No existing saves are migrated.
-
-GRAPHICS OPTIONS
-You can also provide --upscaler off|fsr3|fsr4 and
---output-resolution 1080|1440|4k. Without flags, use saved menu settings.
-Restart Game preserves the selected game, private data folder, and overrides.
+When using a custom --data-dir, pass the same value on later launches.
+Do not delete or move your existing data directory to change the game path.
 
 TROUBLESHOOTING
-If the game moves, supply --game again. Select the extracted CUSA03219
-directory, not its parent, a PKG, or eboot.bin. The legacy
-Play-Star-Ocean.sh launcher remains as a compatibility alias.
-Native Linux x86-64, glibc 2.35+, Python 3 and a working Vulkan driver
-are required. No PS4 game files or firmware are included.
+If the game directory has moved or the launcher cannot find it, pass --game again.
+Select the extracted CUSA03219 directory, not its parent, a PKG, or eboot.bin.
+Native Linux x86-64, Python 3, glibc 2.35+, and a working Vulkan driver are required.
+On SteamOS, add Play-Game.sh as a non-Steam game from Desktop Mode
+(select All Files when necessary). Do not force Windows Proton compatibility.
+If first launch has not been configured, run once from a terminal with --game.
 
 Instructions: https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT
-
+Requires your own legally obtained PS4 game data; no game files are included.

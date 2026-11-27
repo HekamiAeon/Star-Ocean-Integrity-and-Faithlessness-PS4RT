@@ -1,19 +1,32 @@
-# Run the Linux x86-64 release (v1.2)
+# Run the Star Ocean: Integrity and Faithlessness PS4RT Linux x86-64 release (v1.2)
 
-**For players: download, extract, point to your game folder, and play. No compiling. No manual FFmpeg/SDL3 installation.**
+**For players: download the portable Linux runtime, extract it, and point the launcher at your own game. No compilation or manual FFmpeg/SDL3 installation is required.**
 
 ## 1. Download the right file
 
-Open the [v1.2 GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2). Download:
+Open the [Star Ocean: Integrity and Faithlessness PS4RT v1.2 GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2)
+(or [the latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest)). Download:
 
-- **`star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`**: the game runtime for Linux. **Choose this one.**
-- `star-ocean-5-ps4rt-source-7010cc2.tar.gz`: source code for developers, **not needed just to play**.
+- **[star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz)**: prebuilt Linux runtime. **Choose this to play.**
+- [star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256): SHA256 verification file for the runtime.
+- [star-ocean-5-ps4rt-source-7010cc2.tar.gz](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz): matching source code for developers, **not required just to play**.
+- [star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256): SHA256 verification file for the source archive.
 
-The earlier v1.0 and v1.1 archives are preserved for historical reference and rollback; v1.2 is the recommended download.
+These are the four uploaded release assets. GitHub's automatic “Source code”
+ZIP/tarball links are different from the matching source package above.
 
-## 2. Have your own extracted game
+To verify your runtime download, save the Linux `.tar.gz` and its `.sha256`
+in the same directory and run:
 
-You must have an already extracted, **plaintext** PS4 game directory named `CUSA03219`. It should contain at least:
+```bash
+sha256sum -c star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256
+```
+
+It should report `OK`.
+
+## 2. Supply your own extracted PS4 game
+
+The game is **Star Ocean: Integrity and Faithlessness, title ID CUSA03219**. Supply an extracted, *plaintext* game directory with a structure like:
 
 ```text
 CUSA03219/
@@ -23,11 +36,14 @@ CUSA03219/
   (other game data)
 ```
 
-Do not point the launcher at a PKG, the `eboot.bin` file, or a directory *above* `CUSA03219`. The download does **not** provide the game, firmware, or a PKG extractor.
+Point the launcher to `CUSA03219` itself, **not** a PKG, `eboot.bin`, or its parent directory.
+
+Neither the runtime nor the source archive includes PS4 game data, updates, DLC, firmware, decryption keys, or saved games.
 
 ## 3. Extract and launch
 
-Extract the Linux archive using your file manager, or from a terminal in the directory where you downloaded it:
+Extract the Linux archive using your file manager, or in the directory
+containing the downloaded runtime:
 
 ```bash
 tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
@@ -35,39 +51,19 @@ cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
 bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
 
-**Replace `/path/to/CUSA03219` with your actual extracted game folder.** Quotation marks are important if your path contains spaces. Keep the extracted Linux release directory intact and writable.
+Replace the quoted path with the location of **your own extracted game folder**. Keep the entire extracted PS4RT directory together and writable: prepared game files, settings, saves and shader caches live under that directory (`--data-dir` selects another folder); your extracted game folder is read, not modified.
 
-Star Ocean stores its prepared data, settings, and saves under `out/CUSA03219/` by default. After a successful first launch, run `bash Play-Game.sh` without `--game` to reuse the remembered game directory. Providing `--game` again updates that directory. The old `Play-Star-Ocean.sh` launcher remains a compatibility alias. If no game directory is configured, the launcher prints an example command and refers to `PLAYER_README.txt`. There is no Tkinter picker. You can choose a different private location with `--data-dir`, which must also be used on later launches.
+**Later launches:** After successful first-time preparation, run `bash Play-Game.sh` without `--game`. The player remembers the validated CUSA03219 directory. Supply `--game` again if it moves. With no configured game path, the launcher prints an example command and directs you to `PLAYER_README.txt` in the extracted player folder.
 
-## 4. Choose your graphics settings in the game
-
-**Hold L2 and click R3 (press the right stick inward)** on a controller. On a keyboard, press **Insert**. This opens the PS4RT graphics menu.
-
-Use the **D-pad** to navigate, **Cross** to select, and **Circle** to go back. You can choose:
-
-- Output resolution: **1080p / 1440p / 4K**
-- Upscaling: **Off / FSR 3.1 / FSR 4 v07**, depending on hardware support
-- Sharpening and anisotropic filtering (**AF**)
-
-**FSR and resolution commands are optional.** You can select them using this menu instead. For people who prefer launch-time overrides, this is also supported:
+Optional command-line overrides are available:
 
 ```bash
 bash Play-Game.sh --game "/path/to/CUSA03219" --upscaler fsr4 --output-resolution 4k
 ```
 
-The overlay also offers **Restart Game** with a confirmation prompt. Save your progress first, since restarting does not create a game save.
+## Requirements and limitations
 
-**IMPORTANT: Anisotropic filtering (AF) changes require restarting the game.** Other graphics settings such as resolution, upscaling, and sharpening apply live.
-
-## Requirements and troubleshooting
-
-- x86-64 Linux with **glibc 2.35 or newer**; Fedora has been gameplay-tested, while SteamOS and other distros are unverified.
-- Python 3.
-- A working Vulkan loader/graphics driver and host display/input libraries.
-- Your own extracted, plaintext `CUSA03219` game.
-
-The release bundles **12 application libraries** including FFmpeg 8 and SDL3, so **do not install those libraries manually for the prebuilt release**. No `LD_LIBRARY_PATH` command is needed. The bundled runtime finds its libraries using relative `$ORIGIN` paths.
-
-Do not use `build.sh` unless you specifically want to compile from source. Developer build instructions are in [`packaging/linux/README.md`](../packaging/linux/README.md). Full controls and known limitations are in [Running on Linux](RUNNING_LINUX.md).
-
-The game is experimental; a complete playthrough and compatibility across all distros and GPUs are not verified.
+- Native **x86-64/AMD64 Linux**, with **glibc 2.35+** and **Python 3**. ARM64 and CPU translators such as FEX or Box64 are not supported or validated, they might or might not work depending on the device.
+- Working Vulkan 1.3-capable graphics driver/loader and compatible desktop display/input environment. FSR 4 depends on additional compatible device features and falls back to other supported options when unavailable.
+- Fedora Linux with AMD/RADV/NVIDIA graphics has been gameplay-tested, and Steam Deck is confirmed working.
+- The portable bundles its audited application libraries, including SDL3 and FFmpeg. **Do not install separate versions or set `LD_LIBRARY_PATH` merely to run the portable.**
