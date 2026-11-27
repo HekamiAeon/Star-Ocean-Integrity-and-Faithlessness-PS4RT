@@ -33,9 +33,9 @@ The final builder image includes **PNG-enabled FFmpeg**, needed for in-game
 thumbnail decoding. Earlier image stages without that decoder must not be
 used for release bundles.
 
-The image recipes are not bit-for-bit reproducible because some toolchain packages are not pinned to exact build artifacts. Gameplay testing was on Fedora and Steam Deck. The [v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) is the current recommended download. Do not put game files, prepared executables, user saves, shaders, captures, or firmware into published archives. See [upstream credits and notices](../../docs/UPSTREAM_CREDITS.md) for attribution and licensing information.
+The image recipes are not bit-for-bit reproducible because some toolchain packages are not pinned to exact build artifacts. Gameplay testing was on Fedora and Steam Deck. The [v1.3 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.3) is the current recommended download. Do not put game files, prepared executables, user saves, shaders, captures, or firmware into published archives. See [upstream credits and notices](../../docs/UPSTREAM_CREDITS.md) for attribution and licensing information.
 
-**Release workflow:** validate the built bundle, build the exact committed-source archive, test the freshly extracted archive, then publish separately. v1.0 and v1.1 are retained as superseded historical releases; v1.2 is the recommended download.
+**Release workflow:** validate the built bundle, build the exact committed-source archive, test the freshly extracted archive, then publish separately. v1.0, v1.1 and v1.2 are retained as superseded historical releases; v1.3 is the recommended download.
 
 ## Tracked overlay artwork and audio
 

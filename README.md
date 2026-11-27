@@ -23,7 +23,7 @@ affiliated with Square Enix, Sony, or AMD.
 **Want to play? Use the prebuilt Linux release. You do not need to compile
 PS4RT or install FFmpeg, SDL3, or other bundled application libraries.**
 
-1. **Download v1.2:** Use the [Star Ocean: Integrity and Faithlessness PS4RT v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) (also the [latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest)). Download **`star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`** to play; the `source` archive is for developers. The superseded v1.1 release remains available for rollback.
+1. **Download v1.3:** Use the [Star Ocean: Integrity and Faithlessness PS4RT v1.3 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.3) (also the [latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest)). Download **`star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz`** to play; the `source` archive is for developers. The superseded v1.2 release remains available for rollback.
 2. **Have your own extracted PS4 game:** The launcher needs a plaintext **`CUSA03219` folder** containing `sce_sys/param.sfo`, `eboot.bin`, `sce_module/`, and the game's data. Point to **the CUSA03219 folder itself**, not a PKG, its parent folder, or `eboot.bin`.
 3. **Extract the downloaded archive** using your file manager. Open a terminal inside its extracted folder.
 4. **Launch** with the path to your extracted `CUSA03219` folder:

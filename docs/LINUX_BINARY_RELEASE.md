@@ -1,16 +1,16 @@
-# Run the Star Ocean: Integrity and Faithlessness PS4RT Linux x86-64 release (v1.2)
+# Run the Star Ocean: Integrity and Faithlessness PS4RT Linux x86-64 release (v1.3)
 
 **For players: download the portable Linux runtime, extract it, and point the launcher at your own game. No compilation or manual FFmpeg/SDL3 installation is required.**
 
 ## 1. Download the right file
 
-Open the [Star Ocean: Integrity and Faithlessness PS4RT v1.2 GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2)
+Open the [Star Ocean: Integrity and Faithlessness PS4RT v1.3 GitHub release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.3)
 (or [the latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest)). Download:
 
-- **[star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz)**: prebuilt Linux runtime. **Choose this to play.**
-- [star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256): SHA256 verification file for the runtime.
-- [star-ocean-5-ps4rt-source-7010cc2.tar.gz](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz): matching source code for developers, **not required just to play**.
-- [star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256): SHA256 verification file for the source archive.
+- **[star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz)**: prebuilt Linux runtime. **Choose this to play.**
+- [star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz.sha256](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz.sha256): SHA256 verification file for the runtime.
+- [star-ocean-5-ps4rt-source-e66d654.tar.gz](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-source-e66d654.tar.gz): matching source code for developers, **not required just to play**.
+- [star-ocean-5-ps4rt-source-e66d654.tar.gz.sha256](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-source-e66d654.tar.gz.sha256): SHA256 verification file for the source archive.
 
 These are the four uploaded release assets. GitHub's automatic “Source code”
 ZIP/tarball links are different from the matching source package above.
@@ -19,7 +19,7 @@ To verify your runtime download, save the Linux `.tar.gz` and its `.sha256`
 in the same directory and run:
 
 ```bash
-sha256sum -c star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256
+sha256sum -c star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz.sha256
 ```
 
 It should report `OK`.
@@ -46,8 +46,8 @@ Extract the Linux archive using your file manager, or in the directory
 containing the downloaded runtime:
 
 ```bash
-tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
-cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-e66d654
 bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
 

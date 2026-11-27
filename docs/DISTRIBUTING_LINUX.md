@@ -6,23 +6,23 @@ This guide covers the **Star Ocean: Integrity and Faithlessness PS4RT** Linux so
 
 ## For players: download, extract, run
 
-**Do not compile from source just to play v1.2.** Download the prebuilt
-[Linux x86-64 runtime archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz) from the
-[official v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2)
+**Do not compile from source just to play v1.3.** Download the prebuilt
+[Linux x86-64 runtime archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz) from the
+[official v1.3 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.3)
 (or visit [the latest release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/latest)).
-Choose **`star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz`**, not the source archive.
-Download its [SHA256 checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256) alongside it.
+Choose **`star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz`**, not the source archive.
+Download its [SHA256 checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz.sha256) alongside it.
 
 Developers can download the separate
-[matching source archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz) and
-[source checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256).
+[matching source archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-source-e66d654.tar.gz) and
+[source checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-source-e66d654.tar.gz.sha256).
 
 From the folder containing your downloads, verify, extract, and launch:
 
 ```bash
-sha256sum -c star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256
-tar -xzf star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz
-cd star-ocean-5-ps4rt-linux-x86_64-7010cc2
+sha256sum -c star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz.sha256
+tar -xzf star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz
+cd star-ocean-5-ps4rt-linux-x86_64-e66d654
 bash Play-Game.sh --game "/path/to/CUSA03219"
 ```
 
@@ -81,7 +81,7 @@ A host-native development build is **not** the standard redistributable bundle: 
 3. Run `bash packaging/linux/build-runtime.sh` from the committed source root. It stages the private build under `~/Documents/PS4RT-Portable-StarOcean-ubuntu-build/` and prints the bundle path. Then run `python3 tools/package_star_ocean.py` and `python3 tools/package_star_ocean.py --runtime --bundle-from "$BUNDLE"`, which produce **four files** under `out/community/`: the versioned Linux runtime `.tar.gz`, its `.sha256`, the matching source `.tar.gz`, and its `.sha256`.
 4. Validate both checksums and inspect the archive contents for proprietary/private material. Verify the release's embedded source revision, x86-64 ELF architecture, `$ORIGIN` RUNPATHs, glibc baseline, linked dependencies and corresponding-source availability. Verify the archive and exact launcher on a clean host where feasible.
 5. Smoke-test a **freshly extracted portable** with its own `--data-dir`: first-boot save creation, game startup, save/load and restart. Do not use development saves as a shortcut. For the next release, also validate achievements, language changes on restart, 16:9 and experimental ultrawide rendering, and FSR Off / FSR 1 / FSR 3.1 / FSR 4 v07 on supported hardware.
-6. Publish the four assets together under a versioned GitHub Release on [Star Ocean: Integrity and Faithlessness PS4RT](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases). The current [v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) includes the [Linux runtime](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz), its [checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-linux-x86_64-7010cc2.tar.gz.sha256), the [matching source archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz), and its [checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.2/star-ocean-5-ps4rt-source-7010cc2.tar.gz.sha256). The [superseded v1.1 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.1) remains for rollback. For future releases, keep asset filenames and manifests tied to their own committed release SHA and verify the downloaded checksums.
+6. Publish the four assets together under a versioned GitHub Release on [Star Ocean: Integrity and Faithlessness PS4RT](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases). The current [v1.3 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.3) includes the [Linux runtime](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz), its [checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-linux-x86_64-e66d654.tar.gz.sha256), the [matching source archive](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-source-e66d654.tar.gz), and its [checksum](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/download/v1.3/star-ocean-5-ps4rt-source-e66d654.tar.gz.sha256). The [superseded v1.2 release](https://github.com/HekamiAeon/Star-Ocean-Integrity-and-Faithlessness-PS4RT/releases/tag/v1.2) remains for rollback. For future releases, keep asset filenames and manifests tied to their own committed release SHA and verify the downloaded checksums.
 
 The packager uses a restricted source export and a checked runtime file manifest. It bundles the Linux `ps4rt` and its `libps4rtgpu.so` renderer, plus audited runtime libraries and licensed graphics resources. No PS4 binaries or developer-local artifacts belong in public archives.
 
