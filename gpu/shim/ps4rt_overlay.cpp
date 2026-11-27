@@ -455,6 +455,13 @@ void CompactGraphics() {
                   nullptr, Ps4RtGraphics::DisplayModeCount,
                   "Windowed, borderless window or fullscreen. Applies immediately.");
         CheckRow("FPS counter", s.show_fps, "Shows the frame rate in a corner of the screen. Applies live.");
+        // The game's own rate is 60, one frame per vblank (no limit, 0); 30 is the present
+        // thread's limit, read every frame.
+        static const char* const framerate_labels[] = {"60 (original)", "30"};
+        static constexpr int framerate_values[] = {0, 30};
+        ChoiceRow("Framerate", s.fps_limit, framerate_labels, framerate_values, 2,
+                  "60 is the game's own rate. 30 locks the game to an even 30 frames a second for "
+                  "slower GPUs that cannot hold 60; game speed stays the same. Applies live.");
         static const char* const providers[] = {"Off / Original", "FSR 1", "FSR 3.1", "FSR 4 v07"};
         static constexpr int provider_values[] = {Ps4RtSettings::UpscalerOff,
             Ps4RtSettings::UpscalerFsr1, Ps4RtSettings::UpscalerFsr3, Ps4RtSettings::UpscalerFsr4};

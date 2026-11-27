@@ -202,6 +202,9 @@ void Load() {
                 v.output_res = OutputNative;
         }
         v.preset = NativeAA;
+        // The game runs at 60, one frame per vblank: the menu's Framerate row offers that (no
+        // limit, 0) or a 30 lock. Any other saved limit is the game's own rate.
+        if (v.fps_limit != 30) v.fps_limit = 0;
         SetSceneUpscaler(v.upscaler, SceneObjectMotion);
         v.temporal_problem = "FSR is waiting for a 3D scene; original rendering is active.";
     }

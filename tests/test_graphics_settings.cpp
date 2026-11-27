@@ -361,7 +361,24 @@ int main() {
         assert(s.internal_width == 0 && s.internal_height == 0 && s.upscaler == UpscalerFsr3);
     }
     unsetenv("PS4RT_SO_RESOLUTION");
+    // Framerate: the game's own 60 (no limit, saved as 0) or a 30 lock. The choice is kept
+    // across launches, is no restart setting, and is what the present thread limits to; any
+    // other saved limit is the game's own rate.
+    for (int limit : {30, 0, 30}) {
+        s.fps_limit = limit;
+        Save();
+        s.fps_limit = limit ? 0 : 30;
+        Load();
+        assert(s.fps_limit == limit && !GraphicsNeedRestart());
+        assert(Ps4RtGraphics::PresentLimit(s.fps_limit, s.applied_engine_fps) == limit);
+    }
+    for (int other : {60, 120, 240, 45}) {
+        s.fps_limit = other;
+        Save();
+        Load();
+        assert(s.fps_limit == 0);
+    }
     unlink(path);
     std::puts("PASS: native-scene settings persistence, native-port defaults, the pending game-language protocol, "
-              "the internal resolution option and the FSR output choices");
+              "the internal resolution option, the FSR output choices and the frame rate choice");
 }
