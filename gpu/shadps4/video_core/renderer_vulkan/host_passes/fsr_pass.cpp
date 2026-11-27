@@ -145,8 +145,12 @@ vk::ImageView FsrPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
                               vk::Extent2D input_size, vk::Extent2D output_size, Settings settings,
                               bool hdr) {
     // ps4rt: FSR 1 upscales when the window is larger; RCAS alone also runs at the same size.
-    const bool upscale = Ps4RtGraphics::FsrPassRuns(settings.enable, settings.use_rcas, int(input_size.width),
-                                   int(input_size.height), int(output_size.width),
+    // The image is input_viewport when set (a scene in the top-left of larger targets).
+    const vk::Extent2D image_size{
+        settings.input_viewport.width ? settings.input_viewport.width : input_size.width,
+        settings.input_viewport.height ? settings.input_viewport.height : input_size.height};
+    const bool upscale = Ps4RtGraphics::FsrPassRuns(settings.enable, settings.use_rcas, int(image_size.width),
+                                   int(image_size.height), int(output_size.width),
                                    int(output_size.height));
     // SDR spatial AA is independent of FSR: filter at source resolution first,
     // including when scaling/sharpening is off. HDR transfer curves need a
@@ -158,7 +162,11 @@ vk::ImageView FsrPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
     }
     auto& img = available_imgs[cur_image];
     if (++cur_image >= available_imgs.size()) cur_image = 0;
-    if (aa) input = AntiAlias(cmdbuf,img,input,input_size,settings.srgb_input);
+    if (aa) {
+        // The filtered copy is what the passes below sample.
+        input = AntiAlias(cmdbuf, img, input, input_size, settings.srgb_input, settings.input_layout);
+        settings.input_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    }
     if (!upscale) return input;
 
     if (output_size != cur_size) {
@@ -205,7 +213,7 @@ vk::ImageView FsrPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
     FSRConstants consts{};
     FsrEasuCon(reinterpret_cast<AU1*>(&consts.Const0), reinterpret_cast<AU1*>(&consts.Const1),
                reinterpret_cast<AU1*>(&consts.Const2), reinterpret_cast<AU1*>(&consts.Const3),
-               static_cast<AF1>(input_size.width), static_cast<AF1>(input_size.height),
+               static_cast<AF1>(image_size.width), static_cast<AF1>(image_size.height),
                static_cast<AF1>(input_size.width), static_cast<AF1>(input_size.height), (AF1)width,
                (AF1)height);
     consts.Sample[0] = hdr && !settings.use_rcas ? 1 : 0;
@@ -216,7 +224,7 @@ vk::ImageView FsrPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
             std::array<vk::DescriptorImageInfo, 3> img_info{{
                 {
                     .imageView = input,
-                    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+                    .imageLayout = settings.input_layout,
                 },
                 {
                     .imageView = img.intermediary_image_view.get(),
@@ -336,7 +344,7 @@ vk::ImageView FsrPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
         std::array<vk::DescriptorImageInfo, 3> img_info{{
             {
                 .imageView = input,
-                .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+                .imageLayout = settings.input_layout,
             },
             {
                 .imageView = img.output_image_view.get(),
@@ -397,11 +405,12 @@ vk::ImageView FsrPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
         cmdbuf.endDebugUtilsLabelEXT();
     }
 
+    last_output = img.output_image;
     return img.output_image_view.get();
 }
 
 vk::ImageView FsrPass::AntiAlias(vk::CommandBuffer cmdbuf, Img& img, vk::ImageView input,
-                                 vk::Extent2D size, bool srgb_input) {
+                                 vk::Extent2D size, bool srgb_input, vk::ImageLayout input_layout) {
     if (img.aa_size != size) {
         img.aa_view.reset();
         img.aa_image.Destroy();
@@ -425,7 +434,7 @@ vk::ImageView FsrPass::AntiAlias(vk::CommandBuffer cmdbuf, Img& img, vk::ImageVi
         .image=img.aa_image, .subresourceRange={vk::ImageAspectFlagBits::eColor,0,1,0,1}};
     cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount=1,.pImageMemoryBarriers=&barrier});
     const std::array<vk::DescriptorImageInfo,3> infos{{
-        {.imageView=input,.imageLayout=vk::ImageLayout::eShaderReadOnlyOptimal},
+        {.imageView=input,.imageLayout=input_layout},
         {.imageView=*img.aa_view,.imageLayout=vk::ImageLayout::eGeneral},
         {.sampler=*sampler}}};
     std::array<vk::WriteDescriptorSet,3> writes{};

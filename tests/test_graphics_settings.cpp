@@ -45,7 +45,9 @@ int main() {
     // Outputs only persist when larger than the internal resolution (same aspect): use 720p
     // (Resolutions index 1) so 1080p, 1440p and 4K outputs are all valid.
     s.render_resolution = 1;
-    for (int provider : {UpscalerOff, UpscalerFsr3, UpscalerFsr4}) {
+    for (int provider : {UpscalerOff, UpscalerFsr1, UpscalerFsr3, UpscalerFsr4}) {
+        // FSR 1 is spatial: an upscaler like the others, with no jitter and no motion vectors.
+        const bool temporal = provider != UpscalerOff && provider != UpscalerFsr1;
         for (int output : {1, 2, 3}) {
             s.sharpen = true;
             s.sharpness = 0.42f;
@@ -61,10 +63,25 @@ int main() {
             assert(s.anisotropy == 16 && s.startup_anisotropy == 16);
             // Per-character motion goes with the temporal upscalers (FSR 3.1 trails characters
             // with camera motion only).
-            assert(s.object_motion == (provider != UpscalerOff) && !s.fsr1 && !s.spatial_aa);
-            assert(s.jitter == (provider != UpscalerOff));
+            assert(s.object_motion == temporal && !s.fsr1 && !s.spatial_aa);
+            assert(s.jitter == temporal);
             assert(s.rcas == (provider == UpscalerOff));
         }
+    }
+    // FSR 1 is saved under its own name, needs no GPU feature (the FSR 4 fallback leaves it
+    // alone) and leaving it from the menu brings jitter and per-character motion back.
+    assert(std::string(UpscalerName(UpscalerFsr1)) == "fsr1");
+    {
+        const bool fsr4 = s.fsr4_supported, fsr411 = s.fsr411_supported;
+        s.spatial_aa = s.fsr1 = s.reactive = true;
+        SetSceneUpscaler(UpscalerFsr1, SceneObjectMotion);
+        assert(s.upscaler == UpscalerFsr1 && !s.jitter && !s.object_motion);
+        assert(!s.spatial_aa && !s.fsr1 && !s.reactive && !s.rcas);
+        ConfigureUpscalerSupport(false, false);
+        assert(s.upscaler == UpscalerFsr1);
+        ConfigureUpscalerSupport(fsr4, fsr411);
+        SetSceneUpscaler(UpscalerFsr3, SceneObjectMotion);
+        assert(s.upscaler == UpscalerFsr3 && s.jitter && s.object_motion);
     }
     // The launcher starts every title with PS4RT_OBJECT_MOTION=0; this port's upscaler choice
     // still decides.
